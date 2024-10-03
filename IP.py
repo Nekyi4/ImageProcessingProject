@@ -13,7 +13,8 @@ def imagineLoader(param):
 
 def brightnessChangerFlat(image_matrix, brightness_change, sign_negative):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    if len(image_matrix.shape) == 2:  # Grayscale image
+    if len(image_matrix.shape) == 2:  
+        # Grayscale image
         height, width = image_matrix.shape
         for i in range(height):
             for j in range(width):
@@ -54,7 +55,8 @@ def brightnessChangerGamma(image_matrix, brightness_change):
         print("Wrong brightness_changer!")
         return image_matrix
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    if len(image_matrix.shape) == 2:  # Grayscale image
+    if len(image_matrix.shape) == 2:  
+        # Grayscale image
         height, width = image_matrix.shape
         for i in range(height):
             for j in range(width):
@@ -82,7 +84,7 @@ def saveImage(image_matrix, output_path):
 ### CMD commands
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python script.py <command> <image_path> [<parameters>]")
+        print("Usage: python script.py <command> <image_path> [<parameters>] <output_path>")
         sys.exit(1)
 
     command = sys.argv[1]
