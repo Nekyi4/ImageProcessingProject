@@ -11,6 +11,11 @@ def imagineLoader(param):
     image_arr = np.array(im, dtype=np.uint8)
     return image_arr
 
+def saveImage(image_matrix, output_path):
+    new_image = Image.fromarray(image_matrix)
+    new_image.save(output_path)
+    print(f"Image saved at {output_path}")
+
 def brightnessChangerFlat(image_matrix, brightness_change, sign_negative):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     if len(image_matrix.shape) == 2:  
@@ -76,10 +81,55 @@ def brightnessChangerGamma(image_matrix, brightness_change):
                         output_matrix[i, j, k] = image_matrix[i, j, k] * brightness_change   
     return output_matrix
 
-def saveImage(image_matrix, output_path):
-    new_image = Image.fromarray(image_matrix)
-    new_image.save(output_path)
-    print(f"Image saved at {output_path}")
+
+def contrastChanger(image_matrix, contrast_factor):
+    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+    
+    if len(image_matrix.shape) == 2:  # Grayscale image
+        height, width = image_matrix.shape
+        for i in range(height):
+            for j in range(width):
+                # Figure out clipping
+                # co jeśli w (image_matrix[i, j] - 128), image_matrix[i, j] < 128?? Clipping baby
+                if(image_matrix[i, j] == 0):
+                    output_matrix[i,j] = 0
+                elif (contrast_factor * (int(image_matrix[i, j]) - 128) + 128 > 255):
+                    output_matrix[i,j] = 255
+                elif (contrast_factor * (int(image_matrix[i, j]) - 128) + 128 < 0):
+                    output_matrix[i,j] = 0
+                else:
+                    output_matrix[i,j] = contrast_factor * (int(image_matrix[i, j]) - 128) + 128
+                '''if (contrast_factor > (127 / (image_matrix[i, j] - 128))):
+                   output_matrix[i,j] = 255
+                elif (contrast_factor < (- 128 / (image_matrix[i, j] - 128))):
+                    output_matrix[i,j] = 0
+                else:
+                    output_matrix[i,j] = contrast_factor * (image_matrix[i, j] - 128) + 128'''
+                
+    else:
+        # RGB Image
+        height, width, channels = image_matrix.shape
+        for i in range(height):
+            for j in range(width):
+                for k in range(channels):
+                    # Figure out clipping
+                    if(image_matrix[i, j, k] == 0):
+                        output_matrix[i,j,k] = 0
+                    elif (contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128 > 255):
+                        output_matrix[i,j,k] = 255
+                    elif (contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128 < 0):
+                        output_matrix[i,j,k] = 0
+                    else:
+                        output_matrix[i,j,k] = contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128
+                    '''if (contrast_factor > (127 / (output_matrix[i,j,k] - 128))):
+                        output_matrix[i,j,k] = 255
+                    elif (contrast_factor < (- 128 / (output_matrix[i,j,k] - 128))):
+                        output_matrix[i,j,k] = 0
+                    else:
+                        output_matrix[i,j,k] = contrast_factor * (output_matrix[i,j,k] - 128) + 128'''
+                    
+    return output_matrix
+
 
 ### CMD commands
 def main():
@@ -123,6 +173,19 @@ def main():
             saveImage(modified_matrix, output_path)
         except ValueError:
             print("Error: Brightness factor must be a valid float.")
+            sys.exit(1)
+    
+    elif command == '--contrast':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --contrast <image_path> <contrast_factor> <output_path>")
+            sys.exit(1)
+        try:
+            contrast_factor = float(sys.argv[3])
+            output_path = sys.argv[4]
+            modified_matrix = contrastChanger(matrix, contrast_factor)
+            saveImage(modified_matrix, output_path)
+        except ValueError:
+            print("Error: Contrast factor must be a valid float.")
             sys.exit(1)
 
     else:
