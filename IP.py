@@ -56,31 +56,40 @@ def brightnessChangerFlat(image_matrix, brightness_change, sign_negative):
                             output_matrix[i, j, k] = image_matrix[i, j, k] - brightness_change
     return output_matrix
 
-def brightnessChangerGamma(image_matrix, brightness_change):
-    if(brightness_change < 0):
-        print("Wrong brightness_changer!")
-        return image_matrix
+def brightnessChangerFlatLT(image_matrix, brightness_change, sign_negative):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    if len(image_matrix.shape) == 2:  
+    lookup_table = {i: 0 for i in range(256)}
+    
+    for i in range(256):
+        if sign_negative == False:
+            # Increase brightness
+            if (255 - i <= brightness_change):
+                lookup_table[i] = 255 
+            else:
+                lookup_table[i] = i + brightness_change
+        else:
+            # Decrease brightness
+            if (i <= brightness_change):
+                lookup_table[i] = 0 
+            else:
+                lookup_table[i] = i - brightness_change
+
+    if len(image_matrix.shape) == 2:
         # Grayscale image
         height, width = image_matrix.shape
         for i in range(height):
             for j in range(width):
-                if (brightness_change > 255/image_matrix[i, j]):
-                    output_matrix[i, j] = 255
-                else:
-                    output_matrix[i, j] = image_matrix[i, j] * brightness_change
+                output_matrix[i, j] = lookup_table[image_matrix[i, j]]
     else:
         # RGB Image
         height, width, channels = image_matrix.shape
         for i in range(height):
             for j in range(width):
                 for k in range(channels):
-                    if (brightness_change > 255/image_matrix[i, j, k]):
-                        output_matrix[i, j, k] = 255
-                    else:
-                        output_matrix[i, j, k] = image_matrix[i, j, k] * brightness_change   
+                    output_matrix[i, j, k] = lookup_table[image_matrix[i, j, k]]
+    
     return output_matrix
+
 
 
 def brightnessChangerGammaLT(image_matrix, brightness_change):
@@ -199,6 +208,50 @@ def negative(image_matrix):
                     output_matrix[i,j,k] = lookup_table[image_matrix[i,j,k]]
     return output_matrix
 
+def alpha_trimmed_mean_filter(image_matrix, kernel_size=3, alpha=0.2):
+    """
+    Applies an alpha-trimmed mean filter to an image.
+
+    Parameters:
+    - image_matrix: Input image as a NumPy array (grayscale or RGB).
+    - kernel_size: Size of the kernel (must be odd).
+    - alpha: Fraction of lowest and highest values to discard (0 <= alpha < 0.5).
+
+    Returns:
+    - filtered_image: Image after applying the alpha-trimmed mean filter.
+    """
+    if alpha < 0 or alpha >= 0.5:
+        raise ValueError("Alpha must be between 0 and 0.5")
+
+    # Padding to handle the borders of the image
+    pad_size = kernel_size // 2
+    padded_image = np.pad(image_matrix, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), 'reflect')
+
+    height, width, channels = image_matrix.shape
+    filtered_image = np.zeros_like(image_matrix)
+
+    # Number of pixels to remove on each end
+    d = int(alpha * kernel_size * kernel_size)
+
+    # Loop through the image
+    for i in range(height):
+        for j in range(width):
+            for k in range(channels):
+                # Extract the kernel window
+                window = padded_image[i:i+kernel_size, j:j+kernel_size, k].flatten()
+
+                # Sort the window values
+                sorted_window = np.sort(window)
+
+                # Trim the d smallest and d largest values
+                trimmed_window = sorted_window[d:-d]
+
+                # Compute the mean of the remaining values
+                filtered_image[i, j, k] = np.mean(trimmed_window)
+
+    return filtered_image.astype(np.uint8)
+
+
 ### CMD commands
 def main():
     if len(sys.argv) < 3:
@@ -225,6 +278,19 @@ def main():
             brightness_value = int(sys.argv[3])
             sign_negative = brightness_value < 0  # Determine if brightness is increasing or decreasing
             modified_matrix = brightnessChangerFlat(matrix, abs(brightness_value), sign_negative)
+            saveImage(modified_matrix, output_path)
+        except ValueError:
+            print("Error: Brightness value must be an integer.")
+            sys.exit(1)
+
+    elif command == '--brightnessFlatLT':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
+            sys.exit(1)
+        try:
+            brightness_value = int(sys.argv[3])
+            sign_negative = brightness_value < 0  # Determine if brightness is increasing or decreasing
+            modified_matrix = brightnessChangerFlatLT(matrix, abs(brightness_value), sign_negative)
             saveImage(modified_matrix, output_path)
         except ValueError:
             print("Error: Brightness value must be an integer.")
