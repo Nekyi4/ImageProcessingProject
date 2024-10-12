@@ -90,8 +90,6 @@ def brightnessChangerFlatLT(image_matrix, brightness_change, sign_negative):
     
     return output_matrix
 
-
-
 def brightnessChangerGammaLT(image_matrix, brightness_change):
     if(brightness_change < 0):
         print("Wrong brightness_changer!")
@@ -251,6 +249,130 @@ def alpha_trimmed_mean_filter(image_matrix, kernel_size=3, alpha=0.2):
 
     return filtered_image.astype(np.uint8)
 
+def flipHorizontal(image_matrix):
+    if len(image_matrix.shape) == 2:
+        height, width = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j] = image_matrix[i, width - j - 1]
+    elif len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j, :] = image_matrix[i, width - j - 1, :]
+    else:
+        raise ValueError("Unsupported image format.")
+    
+    return output_matrix
+
+def flipVertical(image_matrix):
+    if len(image_matrix.shape) == 2:
+        height, width = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j] = image_matrix[height-i-1, j]
+    elif len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j, :] = image_matrix[height-i-1, j]
+    else:
+        raise ValueError("Unsupported image format.")
+    
+    return output_matrix
+
+def flipHorizontal(image_matrix):
+    if len(image_matrix.shape) == 2:
+        height, width = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j] = image_matrix[i, width - j - 1]
+    elif len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j, :] = image_matrix[i, width - j - 1, :]
+    else:
+        raise ValueError("Unsupported image format.")
+    
+    return output_matrix
+
+def flipDiagonal(image_matrix):
+    if len(image_matrix.shape) == 2:
+        height, width = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j] = image_matrix[height-i-1, width - j - 1]
+    elif len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j, :] = image_matrix[height-i-1, width - j - 1]
+    else:
+        raise ValueError("Unsupported image format.")
+    
+    return output_matrix
+
+def shrinkImage(image_matrix, shrink_factor):
+    if shrink_factor <= 0 or shrink_factor > 1:
+        raise ValueError("Shrink factor must be between 0 and 1.")
+    
+    height, width = image_matrix.shape[:2]
+    new_height = int(height * shrink_factor)
+    new_width = int(width * shrink_factor)
+    
+    if len(image_matrix.shape) == 2:
+        output_matrix = np.zeros((new_height, new_width), dtype=np.uint8)
+        for i in range(new_height):
+            for j in range(new_width):
+                output_matrix[i, j] = image_matrix[int(i / shrink_factor), int(j / shrink_factor)]
+    elif len(image_matrix.shape) == 3:
+
+        channels = image_matrix.shape[2]
+        output_matrix = np.zeros((new_height, new_width, channels), dtype=np.uint8)
+        for i in range(new_height):
+            for j in range(new_width):
+                output_matrix[i, j, :] = image_matrix[int(i / shrink_factor), int(j / shrink_factor), :]
+    else:
+        raise ValueError("Unsupported image format.")
+    
+    return output_matrix
+
+def enlargeImage(image_matrix, enlarge_factor):
+    if enlarge_factor<1:
+        raise ValueError('Shrink factor must be greater than 1')
+    
+    height, width = image_matrix.shape[:2]
+    new_height = int(height * enlarge_factor)
+    new_width = int(width * enlarge_factor)
+    
+    if len(image_matrix.shape) == 2:
+        output_matrix = np.zeros((new_height, new_width), dtype=np.uint8)
+        for i in range(new_height):
+            for j in range(new_width):
+                original_i = min(int(i / enlarge_factor), height - 1)
+                original_j = min(int(j / enlarge_factor), width - 1)
+                output_matrix[i, j, :] = image_matrix[original_i, original_j, :]
+    elif len(image_matrix.shape) == 3:
+        channels = image_matrix.shape[2]
+        output_matrix = np.zeros((new_height, new_width, channels), dtype=np.uint8)
+        for i in range(new_height):
+            for j in range(new_width):
+                original_i = min(int(i / enlarge_factor), height - 1)
+                original_j = min(int(j / enlarge_factor), width - 1)
+                output_matrix[i, j, :] = image_matrix[original_i, original_j, :] 
+    else:
+        raise ValueError("Unsupported image format.")
+
+    return output_matrix
 
 ### CMD commands
 def main():
@@ -355,9 +477,70 @@ def main():
             print("Error: Contrast factor must be a valid float.")
             sys.exit(1)
 
+    elif command=='--hflip':
+        if len(sys.argv) !=4:
+            print("Usage: python script.py --hflip <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            modified_matrix=flipHorizontal(matrix)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command=='--vflip':
+        if len(sys.argv) !=4:
+            print("Usage: python script.py --vflip <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            modified_matrix=flipVertical(matrix)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command=='--dflip':
+        if len(sys.argv) !=4:
+            print("Usage: python script.py --dflip <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            modified_matrix=flipDiagonal(matrix)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    elif command == '--shrink':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --shrink <image_path> <shrink_factor> <output_path>")
+            sys.exit(1)
+        try:
+            shrink_factor = float(sys.argv[3])
+            output_path = sys.argv[4]
+            modified_matrix = shrinkImage(matrix, shrink_factor)
+            saveImage(modified_matrix, output_path)
+        except ValueError:
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--enlarge':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --enlarge <image_path> <enlarge_factor> <output_path>")
+            sys.exit(1)
+        try:
+            enlarge_factor = float(sys.argv[3])
+            output_path = sys.argv[4]
+            modified_matrix = enlargeImage(matrix, enlarge_factor)
+            saveImage(modified_matrix, output_path)
+        except ValueError:
+            print("Error processing the image.")
+            sys.exit(1)
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
+        
 
 
 if __name__ == "__main__":
