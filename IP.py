@@ -16,47 +16,7 @@ def saveImage(image_matrix, output_path):
     new_image.save(output_path)
     print(f"Image saved at {output_path}")
 
-
 def brightnessChangerFlat(image_matrix, brightness_change, sign_negative):
-    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    if len(image_matrix.shape) == 2:  
-        # Grayscale image
-        height, width = image_matrix.shape
-        for i in range(height):
-            for j in range(width):
-                if sign_negative == False:
-                    # Increase brightness
-                    if (255 - image_matrix[i, j] <= brightness_change):
-                        output_matrix[i, j] = 255
-                    else:
-                        output_matrix[i, j] = image_matrix[i, j] + brightness_change     
-                else:
-                    # Decrease brightness
-                    if (image_matrix[i, j] <= brightness_change):
-                        output_matrix[i, j] = 0
-                    else:
-                        output_matrix[i, j] = image_matrix[i, j] - brightness_change
-    else:
-        # RGB Image
-        height, width, channels = image_matrix.shape
-        for i in range(height):
-            for j in range(width):
-                for k in range(channels):
-                    if sign_negative == False:
-                        # Increase brightness
-                        if (255 - image_matrix[i, j, k] <= brightness_change):
-                            output_matrix[i, j, k] = 255
-                        else:
-                            output_matrix[i, j, k] = image_matrix[i, j, k] + brightness_change     
-                    else:
-                        # Decrease brightness
-                        if (image_matrix[i, j, k] <= brightness_change):
-                            output_matrix[i, j, k] = 0
-                        else:
-                            output_matrix[i, j, k] = image_matrix[i, j, k] - brightness_change
-    return output_matrix
-
-def brightnessChangerFlatLT(image_matrix, brightness_change, sign_negative):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     lookup_table = {i: 0 for i in range(256)}
     
@@ -90,7 +50,7 @@ def brightnessChangerFlatLT(image_matrix, brightness_change, sign_negative):
     
     return output_matrix
 
-def brightnessChangerGammaLT(image_matrix, brightness_change):
+def brightnessChangerGamma(image_matrix, brightness_change):
     if(brightness_change < 0):
         print("Wrong brightness_changer!")
         return image_matrix
@@ -116,54 +76,8 @@ def brightnessChangerGammaLT(image_matrix, brightness_change):
                    output_matrix[i,j,k] = lookup_table[image_matrix[i,j,k]] 
     return output_matrix
 
-def contrastChanger(image_matrix, contrast_factor):
-    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    if len(image_matrix.shape) == 2:  # Grayscale image
-        height, width = image_matrix.shape
-        for i in range(height):
-            for j in range(width):
-                # Figure out clipping
-                # co jeśli w (image_matrix[i, j] - 128), image_matrix[i, j] < 128?? Clipping baby
-                if(image_matrix[i, j] == 0):
-                    output_matrix[i,j] = 0
-                elif (contrast_factor * (int(image_matrix[i, j]) - 128) + 128 > 255):
-                    output_matrix[i,j] = 255
-                elif (contrast_factor * (int(image_matrix[i, j]) - 128) + 128 < 0):
-                    output_matrix[i,j] = 0
-                else:
-                    output_matrix[i,j] = contrast_factor * (int(image_matrix[i, j]) - 128) + 128
-                '''if (contrast_factor > (127 / (image_matrix[i, j] - 128))):
-                   output_matrix[i,j] = 255
-                elif (contrast_factor < (- 128 / (image_matrix[i, j] - 128))):
-                    output_matrix[i,j] = 0
-                else:
-                    output_matrix[i,j] = contrast_factor * (image_matrix[i, j] - 128) + 128'''
-                
-    else:
-        # RGB Image
-        height, width, channels = image_matrix.shape
-        for i in range(height):
-            for j in range(width):
-                for k in range(channels):
-                    # Figure out clipping
-                    if(image_matrix[i, j, k] == 0):
-                        output_matrix[i,j,k] = 0
-                    elif (contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128 > 255):
-                        output_matrix[i,j,k] = 255
-                    elif (contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128 < 0):
-                        output_matrix[i,j,k] = 0
-                    else:
-                        output_matrix[i,j,k] = contrast_factor * (int(image_matrix[i, j, k]) - 128) + 128
-                    '''if (contrast_factor > (127 / (output_matrix[i,j,k] - 128))):
-                        output_matrix[i,j,k] = 255
-                    elif (contrast_factor < (- 128 / (output_matrix[i,j,k] - 128))):
-                        output_matrix[i,j,k] = 0
-                    else:
-                        output_matrix[i,j,k] = contrast_factor * (output_matrix[i,j,k] - 128) + 128'''
-                    
-    return output_matrix
 
-def contrastChangerLT(image_matrix, contrast_factor):
+def contrastChanger(image_matrix, contrast_factor):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     lookup_table = {int(i): 0 for i in range(256)}
     for i in range(256):
@@ -405,19 +319,6 @@ def main():
             print("Error: Brightness value must be an integer.")
             sys.exit(1)
 
-    elif command == '--brightnessFlatLT':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
-            sys.exit(1)
-        try:
-            brightness_value = int(sys.argv[3])
-            sign_negative = brightness_value < 0  # Determine if brightness is increasing or decreasing
-            modified_matrix = brightnessChangerFlatLT(matrix, abs(brightness_value), sign_negative)
-            saveImage(modified_matrix, output_path)
-        except ValueError:
-            print("Error: Brightness value must be an integer.")
-            sys.exit(1)
-
     elif command == '--brightnessGamma':
         if len(sys.argv) != 5:
             print("Usage: python script.py --brightnessGamma <image_path> <brightness_factor> <output_path>")
@@ -425,18 +326,6 @@ def main():
         try:
             brightness_factor = float(sys.argv[3])
             modified_matrix = brightnessChangerGamma(matrix, brightness_factor)
-            saveImage(modified_matrix, output_path)
-        except ValueError:
-            print("Error: Brightness factor must be a valid float.")
-            sys.exit(1)
-
-    elif command == '--brightnessGammaLT':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --brightnessGamma <image_path> <brightness_factor> <output_path>")
-            sys.exit(1)
-        try:
-            brightness_factor = float(sys.argv[3])
-            modified_matrix = brightnessChangerGammaLT(matrix, brightness_factor)
             saveImage(modified_matrix, output_path)
         except ValueError:
             print("Error: Brightness factor must be a valid float.")
@@ -454,18 +343,6 @@ def main():
             print("Error: Contrast factor must be a valid float.")
             sys.exit(1)
         
-    elif command == '--contrastLT':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --contrast <image_path> <contrast_factor> <output_path>")
-            sys.exit(1)
-        try:
-            contrast_factor = float(sys.argv[3])
-            modified_matrix = contrastChangerLT(matrix, contrast_factor)
-            saveImage(modified_matrix, output_path)
-        except ValueError:
-            print("Error: Contrast factor must be a valid float.")
-            sys.exit(1)
-
     elif command == '--negative':
         if len(sys.argv) != 4:
             print("Usage: python script.py --negative <image_path> <output_path>")
