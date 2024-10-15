@@ -76,7 +76,6 @@ def brightnessChangerGamma(image_matrix, brightness_change):
                    output_matrix[i,j,k] = lookup_table[image_matrix[i,j,k]] 
     return output_matrix
 
-
 def contrastChanger(image_matrix, contrast_factor):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     lookup_table = {int(i): 0 for i in range(256)}
@@ -119,49 +118,6 @@ def negative(image_matrix):
                 for k in range(channels):
                     output_matrix[i,j,k] = lookup_table[image_matrix[i,j,k]]
     return output_matrix
-
-def alpha_trimmed_mean_filter(image_matrix, kernel_size=3, alpha=0.2):
-    """
-    Applies an alpha-trimmed mean filter to an image.
-
-    Parameters:
-    - image_matrix: Input image as a NumPy array (grayscale or RGB).
-    - kernel_size: Size of the kernel (must be odd).
-    - alpha: Fraction of lowest and highest values to discard (0 <= alpha < 0.5).
-
-    Returns:
-    - filtered_image: Image after applying the alpha-trimmed mean filter.
-    """
-    if alpha < 0 or alpha >= 0.5:
-        raise ValueError("Alpha must be between 0 and 0.5")
-
-    # Padding to handle the borders of the image
-    pad_size = kernel_size // 2
-    padded_image = np.pad(image_matrix, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), 'reflect')
-
-    height, width, channels = image_matrix.shape
-    filtered_image = np.zeros_like(image_matrix)
-
-    # Number of pixels to remove on each end
-    d = int(alpha * kernel_size * kernel_size)
-
-    # Loop through the image
-    for i in range(height):
-        for j in range(width):
-            for k in range(channels):
-                # Extract the kernel window
-                window = padded_image[i:i+kernel_size, j:j+kernel_size, k].flatten()
-
-                # Sort the window values
-                sorted_window = np.sort(window)
-
-                # Trim the d smallest and d largest values
-                trimmed_window = sorted_window[d:-d]
-
-                # Compute the mean of the remaining values
-                filtered_image[i, j, k] = np.mean(trimmed_window)
-
-    return filtered_image.astype(np.uint8)
 
 def flipHorizontal(image_matrix):
     if len(image_matrix.shape) == 2:
@@ -262,7 +218,7 @@ def shrinkImage(image_matrix, shrink_factor):
 
 def enlargeImage(image_matrix, enlarge_factor):
     if enlarge_factor<1:
-        raise ValueError('Shrink factor must be greater than 1')
+        raise ValueError('Enlarge factor must be greater than 1')
     
     height, width = image_matrix.shape[:2]
     new_height = int(height * enlarge_factor)
@@ -288,12 +244,54 @@ def enlargeImage(image_matrix, enlarge_factor):
 
     return output_matrix
 
+def alpha_trimmed_mean_filter(image_matrix, kernel_size=3, alpha=0.5):
+    """
+    Applies an alpha-trimmed mean filter to an image.
+
+    Parameters:
+    - image_matrix: Input image as a NumPy array (grayscale or RGB).
+    - kernel_size: Size of the kernel (must be odd).
+    - alpha: Fraction of lowest and highest values to discard (0 <= alpha < 0.5).
+
+    Returns:
+    - filtered_image: Image after applying the alpha-trimmed mean filter.
+    """
+    if alpha < 0 or alpha >= 0.5:
+        raise ValueError("Alpha must be between 0 and 0.5")
+
+    # Padding to handle the borders of the image
+    pad_size = kernel_size // 2
+    padded_image = np.pad(image_matrix, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), 'reflect')
+
+    height, width, channels = image_matrix.shape
+    filtered_image = np.zeros_like(image_matrix)
+
+    # Number of pixels to remove on each end
+    d = int(alpha * kernel_size * kernel_size)
+
+    # Loop through the image
+    for i in range(height):
+        for j in range(width):
+            for k in range(channels):
+                # Extract the kernel window
+                window = padded_image[i:i+kernel_size, j:j+kernel_size, k].flatten()
+
+                # Sort the window values
+                sorted_window = np.sort(window)
+
+                # Trim the d smallest and d largest values
+                trimmed_window = sorted_window[d:-d]
+
+                # Compute the mean of the remaining values
+                filtered_image[i, j, k] = np.mean(trimmed_window)
+
+    return filtered_image.astype(np.uint8)
+
 ### CMD commands
 def main():
     if len(sys.argv) < 3:
         print("Usage: python script.py <command> <image_path> [<parameters>] <output_path>")
         sys.exit(1)
-
     command = sys.argv[1]
     image_path = sys.argv[2]
     output_path = sys.argv[len(sys.argv)-1]
@@ -351,7 +349,7 @@ def main():
             modified_matrix = negative(matrix)
             saveImage(modified_matrix, output_path)
         except ValueError:
-            print("Error: Contrast factor must be a valid float.")
+            print("Error processing the image.")
             sys.exit(1)
 
     elif command=='--hflip':
@@ -414,12 +412,22 @@ def main():
         except ValueError:
             print("Error processing the image.")
             sys.exit(1)
+    
+    elif command =='--help':
+        print("List of commands:")
+        print("--brightnessFlat     | Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
+        print('--brightnessGamma    | Usage: python script.py --brightnessGamma <image_path> <brightness_factor> <output_path>')
+        print('--contrast           | Usage: python script.py --contrast <image_path> <contrast_factor> <output_path>')
+        print('--negative           | Usage: python script.py --negative <image_path> <output_path>')
+        print('--hflip              | Usage: python script.py --hflip <image_path> <output_path>')
+        print('--vflip              | Usage: python script.py --vflip <image_path> <output_path>')
+        print('--dflip              | Usage: python script.py --dflip <image_path> <output_path>')
+        print('--shrink             | Usage: python script.py --shrink <image_path> <shrink_factor> <output_path>')
+        print('--enlarge            | Usage: python script.py --enlarge <image_path> <enlarge_factor> <output_path>')
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
         
-
-
 if __name__ == "__main__":
     main()
 
