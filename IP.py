@@ -257,20 +257,24 @@ def alphatf(image_matrix, kernel_size, alpha):
         raise ValueError("Kernel size must be an odd number")
 
     height, width, channels = image_matrix.shape
-    filtered_image = np.zeros_like(image_matrix, dtype=np.uint8)
+    filtered_image = image_matrix.copy().astype(np.uint8)
 
     # Number of pixels to remove on each end
-    d = int(alpha * kernel_size * kernel_size)
+    d = max(1, int(alpha * kernel_size * kernel_size))
     border = int((kernel_size - 1) / 2) 
 
     for i in range(border, height - border):
         for j in range(border, width - border):
             for k in range(channels):
-                window =  window = image_matrix[i - border:i + border + 1, j - border:j + border + 1, k].flatten()
+                window =  window = image_matrix[i - border:i + border+1, j - border:j + border+1, k].flatten()
                 sorted_window = np.sort(window)
-                trimmed_window = sorted_window[d:-d]
-                filtered_image[i, j, k] = np.mean(trimmed_window)
-
+                # Check if d is less than the remaining number of pixels after trimming
+                if d < len(sorted_window) // 2:
+                    trimmed_window = sorted_window[d:-d]
+                    filtered_image[i, j, k] = np.mean(trimmed_window)
+                else:
+                    filtered_image[i, j, k] = np.mean(sorted_window)
+                
     return filtered_image.astype(np.uint8)
 
 def contra_harmonic_mean_filter(image_matrix, kernel, P):
@@ -466,8 +470,8 @@ def main():
             if ((alpha < 0) or (alpha >= 0.5)):
                 print("Alpha must be between 0 and 0.5.")
                 sys.exit(1)
-                modified_matrix = alphatf(matrix, kernel_size, alpha)
-                saveImage(modified_matrix, output_path)
+            modified_matrix = alphatf(matrix, kernel_size, alpha)
+            saveImage(modified_matrix, output_path)
         except ValueError:
             print("Error: Invalid kernel size or alpha value.")
             sys.exit(1)
@@ -540,6 +544,31 @@ def main():
             sys.exit(1)
         try:
             matrix_f = imagineLoader(output_path)
+            print(md(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+    elif command == '--test':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --md <image_path> <image2_path> <image3_path>")
+            sys.exit(1)
+        try:
+            origin_path = sys.argv[3]
+            matrix_o = imagineLoader(origin_path)
+            matrix_f = imagineLoader(output_path)
+            print(':Original:')
+            print(mse(matrix, matrix_o))
+            print(pmse(matrix, matrix_o))
+            print(snr(matrix, matrix_o))
+            print(psnr(matrix, matrix_o))
+            print(md(matrix, matrix_o))
+            print("-----")
+            print("Filtered:")
+            print(mse(matrix, matrix_f))
+            print(pmse(matrix, matrix_f))
+            print(snr(matrix, matrix_f))
+            print(psnr(matrix, matrix_f))
             print(md(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
