@@ -120,75 +120,30 @@ def negative(image_matrix):
     return output_matrix
 
 def flipHorizontal(image_matrix):
-    if len(image_matrix.shape) == 2:
-        height, width = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j] = image_matrix[i, width - j - 1]
-    elif len(image_matrix.shape) == 3:
-        height, width, channels = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j, :] = image_matrix[i, width - j - 1, :]
-    else:
-        raise ValueError("Unsupported image format.")
-    
+    height, width, channels = image_matrix.shape
+    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+    for i in range(height):
+        for j in range(width):
+            for k in range(channels):
+                output_matrix[i, j, k] = image_matrix[i, width - j - 1,k]
     return output_matrix
 
 def flipVertical(image_matrix):
-    if len(image_matrix.shape) == 2:
-        height, width = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j] = image_matrix[height-i-1, j]
-    elif len(image_matrix.shape) == 3:
-        height, width, channels = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j, :] = image_matrix[height-i-1, j]
-    else:
-        raise ValueError("Unsupported image format.")
-    
-    return output_matrix
-
-def flipHorizontal(image_matrix):
-    if len(image_matrix.shape) == 2:
-        height, width = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j] = image_matrix[i, width - j - 1]
-    elif len(image_matrix.shape) == 3:
-        height, width, channels = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j, :] = image_matrix[i, width - j - 1, :]
-    else:
-        raise ValueError("Unsupported image format.")
-    
+    height, width, channels = image_matrix.shape
+    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+    for i in range(height):
+        for j in range(width):
+            for k in range(channels):
+                output_matrix[i, j, k] = image_matrix[height-i-1, j,k]
     return output_matrix
 
 def flipDiagonal(image_matrix):
-    if len(image_matrix.shape) == 2:
-        height, width = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j] = image_matrix[height-i-1, width - j - 1]
-    elif len(image_matrix.shape) == 3:
-        height, width, channels = image_matrix.shape
-        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-        for i in range(height):
-            for j in range(width):
-                output_matrix[i, j, :] = image_matrix[height-i-1, width - j - 1]
-    else:
-        raise ValueError("Unsupported image format.")
-    
+    height, width, channels = image_matrix.shape
+    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+    for i in range(height):
+        for j in range(width):
+            for k in range(channels):
+                output_matrix[i, j, k] = image_matrix[height-i-1, width - j - 1, k]
     return output_matrix
 
 def shrinkImage(image_matrix, shrink_factor):
@@ -204,16 +159,12 @@ def shrinkImage(image_matrix, shrink_factor):
         for i in range(new_height):
             for j in range(new_width):
                 output_matrix[i, j] = image_matrix[int(i / shrink_factor), int(j / shrink_factor)]
-    elif len(image_matrix.shape) == 3:
-
+    else:
         channels = image_matrix.shape[2]
         output_matrix = np.zeros((new_height, new_width, channels), dtype=np.uint8)
         for i in range(new_height):
             for j in range(new_width):
                 output_matrix[i, j, :] = image_matrix[int(i / shrink_factor), int(j / shrink_factor), :]
-    else:
-        raise ValueError("Unsupported image format.")
-    
     return output_matrix
 
 def enlargeImage(image_matrix, enlarge_factor):
@@ -280,31 +231,23 @@ def alphatf(image_matrix, kernel_size, alpha):
 def contra_harmonic_mean_filter(image_matrix, kernel, P):
 
     height, width, channels = image_matrix.shape
-    # Create an output image initialized to zeros
-    dst = np.zeros_like(image_matrix)
+    output_matrix = np.zeros_like(image_matrix)
 
-    # Iterate over each pixel in the source image (ignoring borders)
     for row in range(kernel // 2, height - kernel // 2 - 1):
         for col in range(kernel // 2, width - kernel // 2 - 1):
             for chan in range(channels):
                 den = float(0.0)
                 num = float(0.0)
-
-                # Iterate over the kernel
                 for i in range(-(kernel // 2), (kernel // 2) + 1):
                     for j in range(-(kernel // 2), (kernel // 2) + 1):
                         pixel_value = image_matrix[row + i, col + j, chan]
                         den += pixel_value ** P
                         num += pixel_value ** (P + 1)
-
-            # Set the new pixel value
                 if den != 0: 
-                    dst[row, col, chan] = num / den 
+                    output_matrix[row, col, chan] = num / den 
                 else:
-                    dst[row, col, chan]=0
-    # Convert the result to 8-bit
-    dst = dst.astype(np.uint8)
-    return dst
+                    output_matrix[row, col, chan]=0
+    return output_matrix
 
 def mse(original, processed):
     mse = np.mean((original - processed) ** 2)
