@@ -244,48 +244,59 @@ def enlargeImage(image_matrix, enlarge_factor):
 
     return output_matrix
 
-def alpha_trimmed_mean_filter(image_matrix, kernel_size=3, alpha=0.5):
+def alphatf(image_matrix, kernel_size, alpha):
     """
-    Applies an alpha-trimmed mean filter to an image.
-
     Parameters:
     - image_matrix: Input image as a NumPy array (grayscale or RGB).
-    - kernel_size: Size of the kernel (must be odd).
+    - kernel_size: Size of the kernel (box) (must be odd).
     - alpha: Fraction of lowest and highest values to discard (0 <= alpha < 0.5).
-
-    Returns:
-    - filtered_image: Image after applying the alpha-trimmed mean filter.
     """
-    if alpha < 0 or alpha >= 0.5:
+    if ((alpha < 0) or (alpha >= 0.5)):
         raise ValueError("Alpha must be between 0 and 0.5")
-
-    # Padding to handle the borders of the image
-    pad_size = kernel_size // 2
-    padded_image = np.pad(image_matrix, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), 'reflect')
+    if kernel_size % 2 == 0:
+        raise ValueError("Kernel size must be an odd number")
 
     height, width, channels = image_matrix.shape
-    filtered_image = np.zeros_like(image_matrix)
+    filtered_image = np.zeros_like(image_matrix, dtype=np.uint8)
 
     # Number of pixels to remove on each end
     d = int(alpha * kernel_size * kernel_size)
+    border = int((kernel_size - 1) / 2) 
 
-    # Loop through the image
-    for i in range(height):
-        for j in range(width):
+    for i in range(border, height - border):
+        for j in range(border, width - border):
             for k in range(channels):
-                # Extract the kernel window
-                window = padded_image[i:i+kernel_size, j:j+kernel_size, k].flatten()
-
-                # Sort the window values
+                window =  window = image_matrix[i - border:i + border + 1, j - border:j + border + 1, k].flatten()
                 sorted_window = np.sort(window)
-
-                # Trim the d smallest and d largest values
                 trimmed_window = sorted_window[d:-d]
-
-                # Compute the mean of the remaining values
                 filtered_image[i, j, k] = np.mean(trimmed_window)
 
     return filtered_image.astype(np.uint8)
+
+def mse(original, processed):
+    mse = np.mean((original - processed) ** 2)
+    return mse
+
+def pmse(original, processed):
+    max_value = np.max(original)
+    pmse = np.mean((original - processed) ** 2) / (max_value ** 2)
+    return pmse
+
+def snr(original, processed):
+    signal_power = np.sum(original ** 2)
+    noise_power = np.sum((original - processed) ** 2)
+    snr = 10 * np.log10(signal_power / noise_power)
+    return snr
+
+def psnr(original, processed):
+    max_value = np.max(original)
+    msev = mse(original, processed)
+    psnr = 10 * np.log10(max_value ** 2 / msev)
+    return psnr
+
+def md(original, processed):
+    md = np.max(np.abs(original - processed))
+    return md
 
 ### CMD commands
 def main():
@@ -412,7 +423,81 @@ def main():
         except ValueError:
             print("Error processing the image.")
             sys.exit(1)
+
+    elif command == '--alpha':
+        if len(sys.argv) != 6:
+                print("Usage: python script.py --alpha <image_path> <kernel_size> <alpha> <output_path>")
+                sys.exit(1)
+        try:
+            kernel_size = int(sys.argv[3])
+            alpha = float(sys.argv[4])
+            if kernel_size % 2 == 0:
+                print("Kernel size must be an odd number.")
+                sys.exit(1)
+            if ((alpha < 0) or (alpha >= 0.5)):
+                print("Alpha must be between 0 and 0.5.")
+                sys.exit(1)
+                modified_matrix = alphatf(matrix, kernel_size, alpha)
+                saveImage(modified_matrix, output_path)
+        except ValueError:
+            print("Error: Invalid kernel size or alpha value.")
+            sys.exit(1)
+
+    elif command =='--mse':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --mse <image_path> <image2_path>")
+            sys.exit(1)
+        try:
+            matrix_f = imagineLoader(output_path)
+            print(mse(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
     
+    elif command =='--pmse':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --pmse <image_path> <image2_path>")
+            sys.exit(1)
+        try:
+            matrix_f = imagineLoader(output_path)
+            print(pmse(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+    elif command =='--snr':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --snr <image_path> <image2_path>")
+            sys.exit(1)
+        try:
+            matrix_f = imagineLoader(output_path)
+            print(snr(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+    
+    elif command =='--psnr':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --psnr <image_path> <image2_path>")
+            sys.exit(1)
+        try:
+            matrix_f = imagineLoader(output_path)
+            print(psnr(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+    elif command =='--md':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --md <image_path> <image2_path>")
+            sys.exit(1)
+        try:
+            matrix_f = imagineLoader(output_path)
+            print(md(matrix, matrix_f))
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
     elif command =='--help':
         print("List of commands:")
         print("--brightnessFlat     | Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
@@ -424,6 +509,7 @@ def main():
         print('--dflip              | Usage: python script.py --dflip <image_path> <output_path>')
         print('--shrink             | Usage: python script.py --shrink <image_path> <shrink_factor> <output_path>')
         print('--enlarge            | Usage: python script.py --enlarge <image_path> <enlarge_factor> <output_path>')
+        print('--alpha              | Usage: python script.py --alpha <image_path> <kernel_size> <alpha> <output_path>')
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
