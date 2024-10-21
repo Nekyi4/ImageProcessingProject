@@ -273,6 +273,35 @@ def alphatf(image_matrix, kernel_size, alpha):
 
     return filtered_image.astype(np.uint8)
 
+def contra_harmonic_mean_filter(image_matrix, kernel, P):
+
+    height, width, channels = image_matrix.shape
+    # Create an output image initialized to zeros
+    dst = np.zeros_like(image_matrix)
+
+    # Iterate over each pixel in the source image (ignoring borders)
+    for row in range(kernel // 2, height - kernel // 2 - 1):
+        for col in range(kernel // 2, width - kernel // 2 - 1):
+            for chan in range(channels):
+                den = float(0.0)
+                num = float(0.0)
+
+                # Iterate over the kernel
+                for i in range(-(kernel // 2), (kernel // 2) + 1):
+                    for j in range(-(kernel // 2), (kernel // 2) + 1):
+                        pixel_value = image_matrix[row + i, col + j, chan]
+                        den += pixel_value ** P
+                        num += pixel_value ** (P + 1)
+
+            # Set the new pixel value
+                if den != 0: 
+                    dst[row, col, chan] = num / den 
+                else:
+                    dst[row, col, chan]=0
+    # Convert the result to 8-bit
+    dst = dst.astype(np.uint8)
+    return dst
+
 def mse(original, processed):
     mse = np.mean((original - processed) ** 2)
     return mse
@@ -443,6 +472,24 @@ def main():
             print("Error: Invalid kernel size or alpha value.")
             sys.exit(1)
 
+    elif command=='--cmean':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --cmean <image_path> <kernel> <P> <output_path>")
+            sys.exit(1)
+        try:
+            kernel = int(sys.argv[3])
+            P = float(sys.argv[4])
+        except ValueError: 
+            print("Kernel must be an integer and P must be a float.")
+            sys.exit(1)
+        try:
+            modified_matrix=contra_harmonic_mean_filter(matrix,kernel,P)
+            saveImage(modified_matrix,output_path)
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error processing the image: {e}")
+            sys.exit(1)
+        
     elif command =='--mse':
         if len(sys.argv) != 4:
             print("Usage: python script.py --mse <image_path> <image2_path>")
