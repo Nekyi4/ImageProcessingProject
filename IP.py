@@ -525,6 +525,8 @@ def main():
         print('--shrink             | Usage: python script.py --shrink <image_path> <shrink_factor> <output_path>')
         print('--enlarge            | Usage: python script.py --enlarge <image_path> <enlarge_factor> <output_path>')
         print('--alpha              | Usage: python script.py --alpha <image_path> <kernel_size> <alpha> <output_path>')
+        print('--cmean              | Usage: python script.py --cmean <image_path> <kernel> <P> <output_path>')
+        print('--test               | Usage: python script.py --test <orignal_image_path> <noise_image_path> <filtered_image_path>')           
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
