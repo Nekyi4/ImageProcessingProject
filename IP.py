@@ -124,8 +124,7 @@ def flipHorizontal(image_matrix):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     for i in range(height):
         for j in range(width):
-            for k in range(channels):
-                output_matrix[i, j, k] = image_matrix[i, width - j - 1,k]
+                output_matrix[i, j] = image_matrix[i, width - j - 1]
     return output_matrix
 
 def flipVertical(image_matrix):
@@ -133,8 +132,7 @@ def flipVertical(image_matrix):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     for i in range(height):
         for j in range(width):
-            for k in range(channels):
-                output_matrix[i, j, k] = image_matrix[height-i-1, j,k]
+                output_matrix[i, j] = image_matrix[height-i-1, j]
     return output_matrix
 
 def flipDiagonal(image_matrix):
@@ -142,8 +140,7 @@ def flipDiagonal(image_matrix):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     for i in range(height):
         for j in range(width):
-            for k in range(channels):
-                output_matrix[i, j, k] = image_matrix[height-i-1, width - j - 1, k]
+                output_matrix[i, j] = image_matrix[height-i-1, width - j - 1]
     return output_matrix
 
 def shrinkImage(image_matrix, shrink_factor):
@@ -229,24 +226,23 @@ def alphatf(image_matrix, kernel_size, alpha):
     return filtered_image.astype(np.uint8)
 
 def contra_harmonic_mean_filter(image_matrix, kernel, P):
-
+    if kernel % 2 == 0:
+        raise ValueError("Kernel size must be an odd number")
+        
     height, width, channels = image_matrix.shape
-    output_matrix = np.zeros_like(image_matrix)
-
-    for row in range(kernel // 2, height - kernel // 2 - 1):
-        for col in range(kernel // 2, width - kernel // 2 - 1):
-            for chan in range(channels):
-                den = float(0.0)
-                num = float(0.0)
-                for i in range(-(kernel // 2), (kernel // 2) + 1):
-                    for j in range(-(kernel // 2), (kernel // 2) + 1):
-                        pixel_value = image_matrix[row + i, col + j, chan]
-                        den += pixel_value ** P
-                        num += pixel_value ** (P + 1)
-                if den != 0: 
-                    output_matrix[row, col, chan] = num / den 
+    output_matrix = image_matrix.copy().astype(np.uint8)
+    border = kernel // 2
+    for row in range(border, height - border):
+        for col in range(border, width - border):
+            for chan in range(channels):   
+                window = image_matrix[row - border:row + border + 1, col - border:col + border + 1, chan].flatten()
+                mask = window != 0
+                den = np.sum(window[mask] ** P) 
+                num = np.sum(window[mask] ** (P + 1)) 
+                if den != 0:
+                    output_matrix[row, col, chan] = num / den
                 else:
-                    output_matrix[row, col, chan]=0
+                    output_matrix[row, col, chan] = 0
     return output_matrix
 
 def mse(original, processed):
