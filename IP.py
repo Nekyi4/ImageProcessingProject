@@ -208,7 +208,8 @@ def alphatf(image_matrix, kernel_size, alpha):
     filtered_image = image_matrix.copy().astype(np.uint8)
 
     # Number of pixels to remove on each end
-    d = max(1, int(alpha * kernel_size * kernel_size))
+    #d = max(1, int(alpha * kernel_size * kernel_size))
+    d = int(alpha * kernel_size * kernel_size)
     border = int((kernel_size - 1) / 2) 
 
     for i in range(border, height - border):
@@ -218,7 +219,10 @@ def alphatf(image_matrix, kernel_size, alpha):
                 sorted_window = np.sort(window)
                 # Check if d is less than the remaining number of pixels after trimming
                 if d < len(sorted_window) // 2:
-                    trimmed_window = sorted_window[d:-d]
+                    if(d>0):
+                        trimmed_window = sorted_window[d:-d]
+                    else:
+                        trimmed_window = sorted_window
                     filtered_image[i, j, k] = np.mean(trimmed_window)
                 else:
                     filtered_image[i, j, k] = np.mean(sorted_window)
@@ -269,6 +273,36 @@ def psnr(original, processed):
 def md(original, processed):
     md = np.max(np.abs(original - processed))
     return md
+
+### Task 2
+
+def histogram(image_matrix, channel):
+    print("Pon")
+    lookup_table = {i: 0 for i in range(256)}
+    computed_lookup_table = {i: 0 for i in range(256)}
+    print("Pon")
+    if len(image_matrix.shape) == 2:  # Grayscale image
+        for value in image_matrix.flatten():
+            lookup_table[value] += 1
+    else:  # Color image
+        for value in image_matrix[:, :, channel].flatten():
+            lookup_table[value] += 1
+    print("Pon")
+    width = 256
+    height = 100
+    output_matrix = np.zeros((height, width), dtype=np.uint8)
+    max_value = max(lookup_table.values())
+    print("Pon")
+    for i in range(256):
+        computed_lookup_table[i] = lookup_table[i] * height / max_value
+    print("Pon")
+    for i in range(height):
+        for j in range(width):
+            if(computed_lookup_table[j] >= i):
+                output_matrix[i,j] = 255
+    print("Pon")
+    return output_matrix
+
 
 ### CMD commands
 def main():
@@ -511,6 +545,22 @@ def main():
             print(md(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+
+    ### Task2
+
+    elif command =='--histogram':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --histogram <image_path> <channel> <output_path>")
+            sys.exit(1)
+        try:
+            channel = int(sys.argv[3])
+            modified_matrix=histogram(matrix, channel)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
             sys.exit(1)
 
     elif command =='--help':
