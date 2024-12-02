@@ -12,6 +12,7 @@ def imagineLoader(param):
     return image_arr
 
 def saveImage(image_matrix, output_path):
+    image_matrix = np.clip(image_matrix, 0, 255).astype(np.uint8)
     new_image = Image.fromarray(image_matrix)
     new_image.save(output_path)
     print(f"Image saved at {output_path}")
@@ -276,33 +277,258 @@ def md(original, processed):
 
 ### Task 2
 
-def histogram(image_matrix, channel):
-    print("Pon")
+def histogram(image_matrix, channel=0):
     lookup_table = {i: 0 for i in range(256)}
-    computed_lookup_table = {i: 0 for i in range(256)}
-    print("Pon")
     if len(image_matrix.shape) == 2:  # Grayscale image
         for value in image_matrix.flatten():
             lookup_table[value] += 1
     else:  # Color image
         for value in image_matrix[:, :, channel].flatten():
             lookup_table[value] += 1
-    print("Pon")
-    width = 256
+    return np.array([lookup_table[i] for i in range(256)])
+
+def draw_histogram(hist_array):
+    width = 256  
     height = 100
     output_matrix = np.zeros((height, width), dtype=np.uint8)
-    max_value = max(lookup_table.values())
-    print("Pon")
-    for i in range(256):
-        computed_lookup_table[i] = lookup_table[i] * height / max_value
-    print("Pon")
-    for i in range(height):
-        for j in range(width):
-            if(computed_lookup_table[j] >= i):
-                output_matrix[i,j] = 255
-    print("Pon")
+    max_value = np.max(hist_array)
+    if max_value > 0:  
+        normalized_hist = (hist_array * height / max_value).astype(int)
+    else:
+        normalized_hist = np.zeros_like(hist_array)
+    for x in range(width):
+        column_height = normalized_hist[x]
+        output_matrix[height - column_height:height, x] = 255
     return output_matrix
 
+def hrayleigh(hist, g_min, g_max, alpha, L=256):
+    """
+    Perform Rayleigh-based histogram equalization using a precomputed histogram.
+
+    Parameters:
+        hist (numpy.ndarray): Precomputed histogram (1D array of size L, where L is the number of gray levels).
+        g_min (float): Minimum brightness in the output image.
+        g_max (float): Maximum brightness in the output image.
+        alpha (float): Scaling factor for the Rayleigh distribution.
+        L (int): Number of gray levels in the image (default is 256).
+
+    Returns:
+        numpy.ndarray: The transformed image, with the same size as the histogram.
+    """
+    N = np.sum(hist) # Total number of pixels
+    cdf = np.cumsum(hist) / N # Cumulative distribution function
+    output_matrix = np.zeros(L, dtype=float)
+    
+    # Apply the Rayleigh-based transformation for each gray level f
+    for f in range(L):
+        if cdf[f] > 0:
+            # Avoid log(0) or negative values by clamping 1 - cdf[f] to a minimum value
+            value = max(1 - cdf[f], 1e-10)  # Clamp to a small positive value
+            output_matrix[f] = g_min + np.sqrt(-2 * alpha**2 * np.log(value))
+    
+    # Normalize output_matrix to range [g_min, g_max]
+    output_matrix = np.clip(output_matrix, g_min, g_max)
+
+    # Convert to 8-bit integer range [0, 255]
+    output_matrix = ((output_matrix - g_min) / (g_max - g_min) * 255).astype(np.uint8)
+    return output_matrix
+
+def u_slaplace(image_matrix, mask_number):
+    """
+    Universal convolution function that works for any given mask.
+    
+    Parameters:
+        image (list of lists): Input image to be filtered (2D array).
+        mask (list of lists): Convolution mask (kernel).
+    
+    Returns:
+        list of lists: Filtered image (2D array).
+    """
+    mask1 = [
+    [0, -1, 0],
+    [-1, 4, -1],
+    [0, -1, 0] ]
+
+    mask2 = [
+    [-1, -1, -1],
+    [-1, 8, -1],
+    [-1, -1, -1] ]
+
+    mask3 = [
+    [1, -2, 1],
+    [-2, 4, -2],
+    [1, -2, 1] ]
+
+    if(mask_number == 1):
+        mask = mask1
+    elif(mask_number == 2):
+        mask = mask2
+    else:
+        mask = mask3
+
+    height = len(image_matrix)
+    width = len(image_matrix[0])
+    mask_size = len(mask)
+    offset = mask_size // 2  # To handle the convolution window
+    
+    # Convert image_matrix to int32 to avoid overflow during convolution
+    image_matrix = np.array(image_matrix, dtype=np.int32)
+    
+    # Create an output image with the same size as the input image
+    output_image = np.zeros_like(image_matrix)
+    
+    # Iterate over each pixel in the image
+    for p in range(offset, height - offset):
+        for q in range(offset, width - offset):
+            # Apply convolution on the region of interest
+            conv_sum = 0
+            for i in range(mask_size):
+                for j in range(mask_size):
+                    # Get the corresponding pixel from the image
+                    conv_sum += image_matrix[p + i - offset][q + j - offset] * mask[i][j]
+            
+            # Set the value of the output image at (p, q)
+            output_image[p][q] = conv_sum
+
+    # Clip the values to the range [0, 255] and convert back to uint8
+    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+    
+    return output_image
+
+def o_slaplace(image_matrix):
+    """
+    Optimized convolution function specifically for the Laplacian filter.
+    This version leverages the known structure of the Laplacian kernel to optimize the computation.
+    
+    Parameters:
+        image_matrix (list of lists): Input image to be filtered (2D array).
+    
+    Returns:
+        list of lists: Filtered image (2D array).
+    """
+    height = len(image_matrix)
+    width = len(image_matrix[0])
+
+    # Convert image_matrix to int32 to avoid overflow during convolution
+    image_matrix = np.array(image_matrix, dtype=np.int32)
+    
+    # Create an output image with the same size as the input image
+    output_image = np.zeros_like(image_matrix)
+
+    # Perform convolution for each pixel (ignoring borders)
+    for p in range(1, height - 1):
+        for q in range(1, width - 1):
+            # Apply the Laplacian filter (0, -1, 0; -1, 4, -1; 0, -1, 0)
+            conv_sum = (
+                -image_matrix[p-1][q]    # Top
+                -image_matrix[p+1][q]    # Bottom
+                -image_matrix[p][q-1]    # Left
+                -image_matrix[p][q+1]    # Right
+                + 4 * image_matrix[p][q] # Center
+            )
+            # Set the value of the output image at (p, q)
+            output_image[p][q] = conv_sum
+
+    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+
+    return output_image
+
+def osobel(image_matrix):
+    """
+    Apply the Sobel operator for edge detection in a non-linear fashion using NumPy.
+    
+    Parameters:
+        image_matrix (numpy.ndarray): Input image matrix (2D array).
+    
+    Returns:
+        numpy.ndarray: Filtered image matrix (2D array).
+    """
+    # Convert image_matrix to int32 to avoid overflow during convolution
+    image_matrix = np.array(image_matrix, dtype=np.uint16)
+    # Get the height and width of the image
+    height = len(image_matrix)
+    width = len(image_matrix[0])
+    # Create an output image with the same size as the input image
+    output_image = np.zeros_like(image_matrix)
+    # Iterate over each pixel in the image (excluding borders)
+    for n in range(1, height - 1):
+        for m in range(1, width - 1):
+            # Extract the 3x3 neighborhood around the pixel x(n, m)
+            A0 = image_matrix[n-1, m-1]
+            A1 = image_matrix[n-1, m]
+            A2 = image_matrix[n-1, m+1]
+            A3 = image_matrix[n, m+1]
+            A4 = image_matrix[n+1, m+1]
+            A5 = image_matrix[n+1, m]
+            A6 = image_matrix[n+1, m-1]
+            A7 = image_matrix[n, m-1]
+            x_nm = image_matrix[n, m]
+            
+            # Calculate Sobel gradients X and Y
+            X = (A2 + 2 * A3 + A4) - (A0 + 2 * A7 + A6)
+            Y = (A0 + 2 * A1 + A2) - (A6 + 2 * A5 + A4)
+            
+            # Compute the magnitude of the gradient g(n, m)
+            g_nm = np.sqrt(X**2 + Y**2)
+            
+            # Store the result in the output image
+            output_image[n, m] = np.clip(g_nm, 0, 255)  # Clip the value to 255 (max intensity)
+
+    return output_image.astype(np.uint8)  # Return the result as uint8 to match image pixel type
+
+def mean(image_matrix, channel=0):
+    """Calculate the mean brightness."""
+    hist = histogram(image_matrix, channel)
+    N = np.sum(hist)
+    b = np.sum(np.arange(len(hist)) * hist) / N
+    return b
+
+def variance(image_matrix, channel=0):
+    """Calculate the variance."""
+    hist = histogram(image_matrix, channel)
+    N = np.sum(hist)
+    b = mean(image_matrix, channel)
+    D_squared = np.sum((np.arange(len(hist)) - b)**2 * hist) / N
+    return D_squared
+
+def std_deviation(image_matrix, channel=0):
+    """Calculate the standard deviation."""
+    D_squared = variance(image_matrix, channel)
+    sigma = np.sqrt(D_squared)
+    return sigma
+
+def variation_coefficient(image_matrix, channel=0):
+    """Calculate the variation coefficient."""
+    sigma = std_deviation(image_matrix, channel)
+    b = mean(image_matrix, channel)
+    bz = sigma / b
+    return bz
+
+def asymmetry_coefficient(image_matrix, channel=0):
+    """Calculate the asymmetry coefficient."""
+    hist = histogram(image_matrix, channel)
+    N = np.sum(hist)
+    b = mean(image_matrix, channel)
+    sigma = std_deviation(image_matrix, channel)
+    bs = (1 / N) * np.sum(((np.arange(len(hist)) - b)**3) * hist) / (sigma**3)
+    return bs
+
+def flattening_coefficient(image_matrix, channel=0):
+    """Calculate the flattening coefficient."""
+    hist = histogram(image_matrix, channel)
+    N = np.sum(hist)
+    b = mean(image_matrix, channel)
+    sigma = std_deviation(image_matrix, channel)
+    bk = ((1 / N) * np.sum(((np.arange(len(hist)) - b)**4) * hist)) / (sigma**4) - 3
+    return bk
+
+def entropy(image_matrix, channel=0):
+    """Calculate the entropy."""
+    hist = histogram(image_matrix, channel)
+    N = np.sum(hist)
+    probabilities = hist / N
+    bg = -np.sum(probabilities * np.log2(probabilities + 1e-10))  # Avoid log2(0) with 1e-10
+    return bg
 
 ### CMD commands
 def main():
@@ -557,12 +783,191 @@ def main():
         try:
             channel = int(sys.argv[3])
             modified_matrix=histogram(matrix, channel)
+            output_matrix = draw_histogram(modified_matrix)
+            saveImage(output_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--hrayleigh':
+        if len(sys.argv) != 7:
+                print("Usage: python script.py --alpha <image_path> <gmin> <gmax> <alpha> <output_path>")
+                sys.exit(1)
+        try:
+            g_min = int(sys.argv[3])
+            g_max = int(sys.argv[4])
+            alpha = float(sys.argv[5])
+            if g_min < 0 or g_max < 0:
+                print("G values must be bigger than 0")
+                sys.exit(1)
+            if (alpha < 0):
+                print("Alpha must be between 0 and 0.5.")
+                sys.exit(1)
+            histogram_matrix = histogram(matrix)
+            modified_matrix = hrayleigh(histogram_matrix, g_min, g_max, alpha)
+            output_image = np.array([modified_matrix[pixel] for pixel in matrix.flatten()]).reshape(matrix.shape)
+            saveImage(output_image, output_path)
+        except ValueError:
+            print("Error: Invalid g values size or alpha value.")
+            sys.exit(1)
+
+    elif command =='--u_slaplace':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --u_slaplace <image_path> <mask_number> <output_path>")
+            sys.exit(1)
+        try:
+            mask_number = int(sys.argv[3])
+            if (mask_number < 1 or mask_number > 3):
+                print("Mask number must be between 1 and 3")
+                sys.exit(1)
+            modified_matrix=u_slaplace(matrix,mask_number)
             saveImage(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
 
+    elif command =='--o_slaplace':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --u_slaplace <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            modified_matrix=o_slaplace(matrix)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--osobel':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --osobel <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            modified_matrix=osobel(matrix)
+            saveImage(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--mean':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --mean <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = mean(matrix)
+            print(f"The mean is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--variance':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --variance <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = variance(matrix)
+            print(f"The variance is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--std_deviation':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --std_deviation <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = std_deviation(matrix)
+            print(f"The standard deviation is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--variation_coefficient':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --variation_coefficient <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = variation_coefficient(matrix)
+            print(f"The variation coefficient is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--asymmetry_coefficient':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --asymmetry_coefficient <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = asymmetry_coefficient(matrix)
+            print(f"The asymmetry coefficient is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--flattening_coefficient':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --flattening_coefficient <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = flattening_coefficient(matrix)
+            print(f"The flattening coefficient is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--entropy':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --entropy <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            output = entropy(matrix)
+            print(f"The entropy is: {output}")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command == '--test2':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --test2 <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            print("Calculating metrics...")
+            mean_result = mean(matrix)
+            print(f"The mean is: {mean_result}")
+            
+            variance_result = variance(matrix)
+            print(f"The variance is: {variance_result}")
+            
+            std_dev_result = std_deviation(matrix)
+            print(f"The standard deviation is: {std_dev_result}")
+            
+            variation_coeff_result = variation_coefficient(matrix)
+            print(f"The variation coefficient is: {variation_coeff_result}")
+            
+            asymmetry_coeff_result = asymmetry_coefficient(matrix)
+            print(f"The asymmetry coefficient is: {asymmetry_coeff_result}")
+            
+            flattening_coeff_result = flattening_coefficient(matrix)
+            print(f"The flattening coefficient is: {flattening_coeff_result}")
+            
+            entropy_result = entropy(matrix)
+            print(f"The entropy is: {entropy_result}")
+            
+            sys.exit(0)
+        except ValueError:
+            print("Error processing the image.")
+            sys.exit(1)
+            
     elif command =='--help':
         print("List of commands:")
         print("--brightnessFlat     | Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
