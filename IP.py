@@ -1,6 +1,7 @@
 from PIL import Image
 import numpy as np
 import sys
+import time
 
 ### Image processing
 
@@ -315,22 +316,23 @@ def hrayleigh(hist, g_min, g_max, alpha, L=256):
     Returns:
         numpy.ndarray: The transformed image, with the same size as the histogram.
     """
-    N = np.sum(hist) # Total number of pixels
-    cdf = np.cumsum(hist) / N # Cumulative distribution function
+    N = np.sum(hist)
+    cdf = np.cumsum(hist) / N
     output_matrix = np.zeros(L, dtype=float)
     
     # Apply the Rayleigh-based transformation for each gray level f
     for f in range(L):
         if cdf[f] > 0:
             # Avoid log(0) or negative values by clamping 1 - cdf[f] to a minimum value
-            value = max(1 - cdf[f], 1e-10)  # Clamp to a small positive value
+            value = max(1 - cdf[f], 1e-10)
             output_matrix[f] = g_min + np.sqrt(-2 * alpha**2 * np.log(value))
     
     # Normalize output_matrix to range [g_min, g_max]
     output_matrix = np.clip(output_matrix, g_min, g_max)
 
     # Convert to 8-bit integer range [0, 255]
-    output_matrix = ((output_matrix - g_min) / (g_max - g_min) * 255).astype(np.uint8)
+    #output_matrix = ((output_matrix - g_min) / (g_max - g_min) * 255).astype(np.uint8)
+
     return output_matrix
 
 def u_slaplace(image_matrix, mask_number):
@@ -344,6 +346,7 @@ def u_slaplace(image_matrix, mask_number):
     Returns:
         list of lists: Filtered image (2D array).
     """
+    start_time = time.time()
     mask1 = [
     [0, -1, 0],
     [-1, 4, -1],
@@ -369,12 +372,9 @@ def u_slaplace(image_matrix, mask_number):
     height = len(image_matrix)
     width = len(image_matrix[0])
     mask_size = len(mask)
-    offset = mask_size // 2  # To handle the convolution window
+    offset = mask_size // 2
     
-    # Convert image_matrix to int32 to avoid overflow during convolution
     image_matrix = np.array(image_matrix, dtype=np.int32)
-    
-    # Create an output image with the same size as the input image
     output_image = np.zeros_like(image_matrix)
     
     # Iterate over each pixel in the image
@@ -387,12 +387,13 @@ def u_slaplace(image_matrix, mask_number):
                     # Get the corresponding pixel from the image
                     conv_sum += image_matrix[p + i - offset][q + j - offset] * mask[i][j]
             
-            # Set the value of the output image at (p, q)
             output_image[p][q] = conv_sum
 
-    # Clip the values to the range [0, 255] and convert back to uint8
     output_image = np.clip(output_image, 0, 255).astype(np.uint8)
     
+    end_time = time.time() 
+    print(f"Execution time for u_slaplace: {end_time - start_time:.4f} seconds")
+
     return output_image
 
 def o_slaplace(image_matrix):
@@ -406,13 +407,12 @@ def o_slaplace(image_matrix):
     Returns:
         list of lists: Filtered image (2D array).
     """
+    start_time = time.time()
     height = len(image_matrix)
     width = len(image_matrix[0])
 
-    # Convert image_matrix to int32 to avoid overflow during convolution
     image_matrix = np.array(image_matrix, dtype=np.int32)
     
-    # Create an output image with the same size as the input image
     output_image = np.zeros_like(image_matrix)
 
     # Perform convolution for each pixel (ignoring borders)
@@ -426,10 +426,12 @@ def o_slaplace(image_matrix):
                 -image_matrix[p][q+1]    # Right
                 + 4 * image_matrix[p][q] # Center
             )
-            # Set the value of the output image at (p, q)
             output_image[p][q] = conv_sum
 
     output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+
+    end_time = time.time()
+    print(f"Execution time for u_slaplace: {end_time - start_time:.4f} seconds")
 
     return output_image
 
@@ -443,14 +445,10 @@ def osobel(image_matrix):
     Returns:
         numpy.ndarray: Filtered image matrix (2D array).
     """
-    # Convert image_matrix to int32 to avoid overflow during convolution
     image_matrix = np.array(image_matrix, dtype=np.uint16)
-    # Get the height and width of the image
     height = len(image_matrix)
     width = len(image_matrix[0])
-    # Create an output image with the same size as the input image
     output_image = np.zeros_like(image_matrix)
-    # Iterate over each pixel in the image (excluding borders)
     for n in range(1, height - 1):
         for m in range(1, width - 1):
             # Extract the 3x3 neighborhood around the pixel x(n, m)
@@ -471,10 +469,9 @@ def osobel(image_matrix):
             # Compute the magnitude of the gradient g(n, m)
             g_nm = np.sqrt(X**2 + Y**2)
             
-            # Store the result in the output image
-            output_image[n, m] = np.clip(g_nm, 0, 255)  # Clip the value to 255 (max intensity)
+            output_image[n, m] = np.clip(g_nm, 0, 255) 
 
-    return output_image.astype(np.uint8)  # Return the result as uint8 to match image pixel type
+    return output_image.astype(np.uint8)
 
 def mean(image_matrix, channel=0):
     """Calculate the mean brightness."""
@@ -527,7 +524,7 @@ def entropy(image_matrix, channel=0):
     hist = histogram(image_matrix, channel)
     N = np.sum(hist)
     probabilities = hist / N
-    bg = -np.sum(probabilities * np.log2(probabilities + 1e-10))  # Avoid log2(0) with 1e-10
+    bg = -np.sum(probabilities * np.log2(probabilities + 1e-10)) 
     return bg
 
 ### CMD commands
