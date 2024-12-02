@@ -307,14 +307,14 @@ def hrayleigh(hist, g_min, g_max, alpha, L=256):
     Perform Rayleigh-based histogram equalization using a precomputed histogram.
 
     Parameters:
-        hist (numpy.ndarray): Precomputed histogram (1D array of size L, where L is the number of gray levels).
-        g_min (float): Minimum brightness in the output image.
-        g_max (float): Maximum brightness in the output image.
-        alpha (float): Scaling factor for the Rayleigh distribution.
-        L (int): Number of gray levels in the image (default is 256).
+        hist: Precomputed histogram (1D array of size L, where L is the number of gray levels).
+        g_min: Minimum brightness in the output image.
+        g_max: Maximum brightness in the output image.
+        alpha: Scaling factor for the Rayleigh distribution.
+        L: Number of gray levels in the image (default is 256).
 
     Returns:
-        numpy.ndarray: The transformed image, with the same size as the histogram.
+        The transformed image
     """
     N = np.sum(hist)
     cdf = np.cumsum(hist) / N
@@ -340,11 +340,11 @@ def u_slaplace(image_matrix, mask_number):
     Universal convolution function that works for any given mask.
     
     Parameters:
-        image (list of lists): Input image to be filtered (2D array).
-        mask (list of lists): Convolution mask (kernel).
+        image: Input image to be filtered (2D array).
+        mask: Convolution mask (kernel).
     
     Returns:
-        list of lists: Filtered image (2D array).
+        Filtered image (2D array).
     """
     start_time = time.time()
     mask1 = [
@@ -399,13 +399,12 @@ def u_slaplace(image_matrix, mask_number):
 def o_slaplace(image_matrix):
     """
     Optimized convolution function specifically for the Laplacian filter.
-    This version leverages the known structure of the Laplacian kernel to optimize the computation.
     
     Parameters:
-        image_matrix (list of lists): Input image to be filtered (2D array).
+        image_matrix: Input image to be filtered (2D array).
     
     Returns:
-        list of lists: Filtered image (2D array).
+        Filtered image (2D array).
     """
     start_time = time.time()
     height = len(image_matrix)
@@ -440,10 +439,10 @@ def osobel(image_matrix):
     Apply the Sobel operator for edge detection in a non-linear fashion using NumPy.
     
     Parameters:
-        image_matrix (numpy.ndarray): Input image matrix (2D array).
+        image_matrix: Input image matrix (2D array).
     
     Returns:
-        numpy.ndarray: Filtered image matrix (2D array).
+        Filtered image matrix (2D array).
     """
     image_matrix = np.array(image_matrix, dtype=np.uint16)
     height = len(image_matrix)
