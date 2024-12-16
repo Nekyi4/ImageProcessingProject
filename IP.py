@@ -7,16 +7,13 @@ from queue import Queue
 ### Image processing
 
 def imageLoader(param):
-    try:
-        img = Image.open(param).convert("L")  # Convert to grayscale
-        binary_image = np.array(img) > 128  # Threshold to binary (0 or 1)
-        return binary_image.astype(int).tolist()
-    except Exception as e:
-        print(f"Error loading image: {e}")
-        return None
+    im = Image.open(param)
+    if im.mode != 'RGB':
+        im = im.convert('RGB')
+    image_arr = np.array(im, dtype=np.uint8)
+    return image_arr
 
 def saveImage(image_matrix, output_path):
-    image_matrix = np.clip(image_matrix, 0, 255).astype(np.uint8)
     new_image = Image.fromarray(image_matrix)
     new_image.save(output_path)
     print(f"Image saved at {output_path}")
@@ -40,7 +37,6 @@ def imageLoader1B(filepath):
 
         return binary_image
 
-        return binary_image
     except Exception as e:
         print(f"Error loading image: {e}")
         return None
@@ -845,8 +841,7 @@ def region_growing(image, seed, threshold, criterion=0):
 
     Parameters:
         image (numpy.ndarray): Input image (H x W x C) where C is the number of channels (e.g., 3 for RGB).
-        seedX (int): X-coordinate of the seed point.
-        seedY (int): Y-coordinate of the seed point.
+        seed (tuple): A tuple (X, Y) representing the seed point.
         threshold (float): Threshold value for similarity criterion (0 for binary images).
         criterion (int): Distance criterion:
                         0 - Euclidean distance
@@ -856,19 +851,18 @@ def region_growing(image, seed, threshold, criterion=0):
     Returns:
         numpy.ndarray: Binary image (H x W) with the grown region marked as 255 (white).
     """
+    image = image[:, :, 0]
     image = np.array(image, dtype=np.int16)
-
-    seedX = seed[0]
-    seedY = seed[1]
-
+    seedX, seedY = seed
     # Initialize the result binary image
-    result = np.zeros_like(image, dtype=np.int16)
+    result = np.zeros_like(image, dtype=np.uint8)
 
     # Seed pixel intensity
-    seed_value = int(image[seedY, seedX])  # Cast seed value to int for arithmetic operations
+    seed_value = image[seedY, seedX]  # Cast seed value to int for arithmetic operations
     result[seedY, seedX] = 255  # Mark seed point as part of the region
 
     print(f"Seed Value at ({seedX}, {seedY}): {seed_value}")
+    
 
     # Directions for 8-connectivity
     dx = [-1, 1, 0, 0, -1, 1, -1, 1]
@@ -876,7 +870,7 @@ def region_growing(image, seed, threshold, criterion=0):
 
     # Queue for BFS
     pixel_queue = [(seedX, seedY)]
-
+    
     while pixel_queue:
         x, y = pixel_queue.pop(0)
 
@@ -887,33 +881,30 @@ def region_growing(image, seed, threshold, criterion=0):
 
             # Ensure the neighbor is within bounds and not yet visited
             if 0 <= nx < image.shape[1] and 0 <= ny < image.shape[0] and result[ny, nx] == 0:
-                neighbor_value = int(image[ny, nx])  # Cast to int for arithmetic operations
+                neighbor_value = image[ny, nx]  # Pixel value in all channels (for color images)
 
-                distance = 0
                 # Compute the distance based on the chosen criterion
-                if criterion == 0:  # Euclidean distance
-                    distance = abs(neighbor_value - seed_value)
-                elif criterion == 1:  # Manhattan distance
-                    distance = abs(neighbor_value - seed_value)
+                distance = 0
+                if criterion == 0:  # Euclidean distance (for multi-channel)
+                    distance = np.linalg.norm(neighbor_value - seed_value)
+                elif criterion == 1:  # Manhattan distance (sum of absolute differences)
+                    distance = np.sum(np.abs(neighbor_value - seed_value))
                 elif criterion == 2:  # Maximum absolute difference
-                    distance = abs(neighbor_value - seed_value)
+                    distance = np.max(np.abs(neighbor_value - seed_value))
 
                 # Check if the distance is within the threshold
                 if distance <= threshold:
                     result[ny, nx] = 255  # Add to the region
                     pixel_queue.append((nx, ny))  # Add to the queue
 
-    result = np.array(image, dtype=np.uint8)
-
     return result
 
 def seed_points():
-    seed_points = (320, 505)  # Example seed points
-    return seed_points
+    # Example of multiple seed points
+    return [(50, 50), (100, 100), (320,450), (0,0)]  # List of seed points
 
 def threshold():
-    threshold = 50  # Example threshold for region growing
-    return threshold
+    return 50
 
 
 ### CMD commands
@@ -1353,8 +1344,6 @@ def main():
         except ValueError:
             print("Error processing the image.")
             sys.exit(1)
-            
-
     ## Task 3
 
     elif command =='--dilation':
@@ -1483,9 +1472,8 @@ def main():
         if len(sys.argv) != 6:
             print("Usage: python script.py --region_growing <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
             sys.exit(1)
-
         try:
-            matrix = imageLoader1B(image_path)
+            matrix = imageLoader(image_path)
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
             sys.exit(1)
@@ -1493,8 +1481,8 @@ def main():
         try:
             tseed_points = int(sys.argv[3])
             tthreshold = int(sys.argv[4])
-            modified_matrix = region_growing(matrix, seed_points(), threshold())
-            saveImage1B(modified_matrix,output_path)
+            modified_matrix = region_growing(matrix, seed_points()[2], threshold())
+            saveImage(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
             print("Error processing the image.")
