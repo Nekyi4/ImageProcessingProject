@@ -2,21 +2,70 @@ from PIL import Image
 import numpy as np
 import sys
 import time
+from queue import Queue
 
 ### Image processing
 
-def imagineLoader(param):
-    im = Image.open(param)
-    if im.mode != 'RGB':
-        im = im.convert('RGB')
-    image_arr = np.array(im, dtype=np.uint8)
-    return image_arr
+def imageLoader(param):
+    try:
+        img = Image.open(param).convert("L")  # Convert to grayscale
+        binary_image = np.array(img) > 128  # Threshold to binary (0 or 1)
+        return binary_image.astype(int).tolist()
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return None
 
 def saveImage(image_matrix, output_path):
     image_matrix = np.clip(image_matrix, 0, 255).astype(np.uint8)
     new_image = Image.fromarray(image_matrix)
     new_image.save(output_path)
     print(f"Image saved at {output_path}")
+
+
+def imageLoader1B(filepath):
+    """
+    Load an image and convert it into a binary matrix (1-bit representation).
+    :param filepath: Path to the input image file
+    :return: 2D list representing the binary image
+    """
+    try:
+        # Open image and convert to grayscale
+        img = Image.open(filepath).convert("L")  # L mode = 8-bit grayscale
+
+        # Convert image to numpy array
+        img_array = np.array(img)
+
+        # Threshold to binary (1 for pixel values > 128, 0 otherwise)
+        binary_image = (img_array > 128).astype(np.uint8)
+
+        return binary_image
+
+        return binary_image
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return None
+
+def saveImage1B(image_matrix, output_path):
+    """
+    Save a binary matrix as a grayscale image (0 -> black, 255 -> white).
+    :param image_matrix: 2D list representing the binary image
+    :param output_path: Path to save the output image
+    """
+    try:
+        height = len(image_matrix)
+        width = len(image_matrix[0])
+
+        # Create a new grayscale image
+        new_image = Image.new("L", (width, height))
+        for y in range(height):
+            for x in range(width):
+                new_image.putpixel((x, y), 255 if image_matrix[y][x] == 1 else 0)
+
+        # Save the image
+        new_image.save(output_path)
+        print(f"Image saved at {output_path}")
+    except Exception as e:
+        print(f"Error saving image: {e}")
 
 def brightnessChangerFlat(image_matrix, brightness_change, sign_negative):
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
@@ -526,6 +575,347 @@ def entropy(image_matrix, channel=0):
     bg = -np.sum(probabilities * np.log2(probabilities + 1e-10)) 
     return bg
 
+
+### Task3
+
+def dilation(image, struct_element):
+    """
+    Perform morphological dilation on a binary 2D image (1-bit images).
+    
+    :param image: 2D list representing binary image (0 and 1)
+    :param struct_element: 2D list representing binary structural element (0 and 1)
+    :return: Dilated image as 2D list
+    """
+    height = len(image)  # Number of rows in the image
+    width = len(image[0])  # Number of columns in the image
+    se_rows = len(struct_element)  # Structural element rows
+    se_cols = len(struct_element[0])  # Structural element columns
+
+    # Calculate padding size for structural element
+    pad_x = se_rows // 2
+    pad_y = se_cols // 2
+
+    # Step 1: Pad the original image with zeros to handle border pixels
+    padded_image = [[0] * (width + 2 * pad_y) for _ in range(height + 2 * pad_x)]
+    for i in range(height):
+        for j in range(width):
+            padded_image[i + pad_x][j + pad_y] = image[i][j]
+
+    # Step 2: Initialize the output image
+    output_image = [[0 for _ in range(width)] for _ in range(height)]
+
+    # Step 3: Perform Dilation
+    for i in range(height):  # Iterate over the image rows
+        for j in range(width):  # Iterate over the image columns
+            match_found = False
+            for m in range(se_rows):  # Iterate over the structural element rows
+                for n in range(se_cols):  # Iterate over the structural element columns
+                    if struct_element[m][n] == 1:  # Check if SE element is 1
+                        if padded_image[i + m][j + n] == 1:  # Check corresponding pixel in padded image
+                            match_found = True
+                            break
+                if match_found:  # Stop searching once a match is found
+                    break
+            output_image[i][j] = 1 if match_found else 0  # Set output pixel
+
+    output_image = np.array(output_image)
+    return output_image
+
+def erosion(image, struct_element):
+    """
+    Perform morphological erosion on a binary image.
+    :param image: 2D binary image (0 and 1)
+    :param struct_element: 2D binary structural element (0 and 1)
+    :return: Eroded image as a 2D list
+    """
+    # Image dimensions
+    height = len(image)
+    width = len(image[0])
+    
+    # Structural element dimensions
+    se_rows = len(struct_element)
+    se_cols = len(struct_element[0])
+
+    # Padding sizes
+    pad_x = se_rows // 2
+    pad_y = se_cols // 2
+
+    # Step 1: Pad the image with zeros
+    padded_image = [[0] * (width + 2 * pad_y) for _ in range(height + 2 * pad_x)]
+    for i in range(height):
+        for j in range(width):
+            padded_image[i + pad_x][j + pad_y] = image[i][j]
+
+    # Step 2: Initialize the output image
+    output_image = [[0 for _ in range(width)] for _ in range(height)]
+
+    # Step 3: Perform Erosion Operation
+    for i in range(height):  # Traverse each pixel in the original image
+        for j in range(width):
+            match = True  # Assume match initially
+            for m in range(se_rows):  # Traverse the structural element
+                for n in range(se_cols):
+                    if struct_element[m][n] == 1:  # Only consider structural element's 1s
+                        if padded_image[i + m][j + n] != 1:  # Check if any mismatch occurs
+                            match = False
+                            break
+                if not match:  # Exit early if no match
+                    break
+            if match:
+                output_image[i][j] = 1  # Set output pixel to 1 if full match found
+
+    output_image = np.array(output_image)
+    return output_image
+
+
+def opening(image, struct_element):
+    """
+    Perform morphological opening: erosion followed by dilation.
+    :param image: 2D binary image
+    :param struct_element: 2D structural element
+    :return: Image after opening operation
+    """
+    eroded = erosion(image, struct_element)
+    opened = dilation(eroded, struct_element)
+    return opened
+
+def closing(image, struct_element):
+    """
+    Perform morphological closing: dilation followed by erosion.
+    :param image: 2D binary image
+    :param struct_element: 2D structural element
+    :return: Image after closing operation
+    """
+    dilated = dilation(image, struct_element)
+    closed = erosion(dilated, struct_element)
+    return closed
+
+def hmt(image, struct_element_B1, struct_element_B2):
+    """
+    Perform Hit-or-Miss Transformation (HMT) on a binary image.
+    :param image: 2D binary image
+    :param struct_element_B1: Foreground structural element (B1)
+    :param struct_element_B2: Background structural element (B2, complement)
+    :return: HMT-transformed image
+    """
+    eroded_B1 = erosion(image, struct_element_B1)
+    eroded_B2 = erosion(1 - image, struct_element_B2)
+    return eroded_B1 & eroded_B2
+
+def successive_n_transform(image, struct_elements, n=8):
+    """
+    Apply the successive morphological transformations N(A, {B1, ..., Bn})
+    :param image: 2D binary image
+    :param struct_elements: List of structural elements [B1, B2, ..., Bn]
+    :param n: Number of iterations
+    :return: Transformed image
+    """
+    for _ in range(n):
+        for se in struct_elements:
+            new_image = image.copy()
+            new_image = erosion(new_image, se)
+            image = np.where(image != new_image, new_image, image)  # Update only where changes occur
+    return image
+
+def structural_elements(param):
+    # Define sample structural elements (as binary numpy arrays)
+    B1 = np.array([[0, 0, 0],
+               [0, 1, 1],
+               [0, 0, 0]])
+
+    B2 = np.array([[0, 0, 0],
+                [0, 1, 0],
+                [0, 1, 0]])
+
+    B3 = np.array([[1, 1, 1],
+                [1, 1, 1],
+                [1, 1, 1]])
+
+    B4 = np.array([[0, 1, 0],
+                [1, 1, 1],
+                [0, 1, 0]])
+
+    B5 = np.array([[0, 0, 0],
+                [0, 1, 1],
+                [0, 1, 0]])
+
+    B6 = np.array([[0, 0, 0],
+                [0, 0, 1],
+                [0, 1, 0]])
+
+    B7 = np.array([[0, 0, 0],
+                [1, 1, 1],
+                [0, 0, 0]])
+
+    B8 = np.array([[0, 0, 0],
+                [1, 0, 1],
+                [0, 0, 0]])
+
+    B9 = np.array([[0, 0, 1],
+                [1, 1, 0],
+                [1, 0, 0]])
+
+    B10 = np.array([[0, 1, 1],
+                    [0, 1, 0],
+                    [0, 0, 0]])
+
+    # List of structural elements for N-transform
+    structural_elements = [B1, B2, B3, B4, B5, B6, B7, B8, B9, B10]
+    return structural_elements[param]
+
+def structural_elements_XII(param):
+
+    B1 = np.array([[0, 0, 0],
+                [0, 1, 0],
+                [1, 1, 1]])
+
+    B1c = np.array([[1, 1, 1],
+                [0, 0, 0],
+                [0, 0, 0]])
+
+    B2 = np.array([[0, 0, 0],
+                [1, 1, 0],
+                [1, 1, 0]])
+
+    B2c = np.array([[0, 1, 1],
+                [0, 0, 1],
+                [0, 0, 0]])
+
+    B3 = np.array([[1, 0, 0],
+                [1, 1, 0],
+                [1, 0, 0]])
+
+    B3c = np.array([[0, 0, 1],
+                [0, 0, 1],
+                [0, 0, 1]])
+
+    B4 = np.array([[1, 1, 0],
+                [1, 1, 0],
+                [0, 0, 0]])
+
+    B4c = np.array([[0, 0, 1],
+                [0, 0, 1],
+                [1, 1, 1]])
+
+    B5 = np.array([[1, 1, 1],
+                [0, 1, 0],
+                [0, 0, 0]])
+
+    B5c = np.array([[0, 0, 0],
+                    [0, 0, 0],
+                    [1, 1, 1]])
+
+    B6 = np.array([[0, 1, 1],
+                    [0, 1, 1],
+                    [0, 0, 0]])
+
+    B6c = np.array([[0, 0, 0],
+                    [1, 0, 0],
+                    [1, 1, 0]])
+
+    B7 = np.array([[0, 0, 1],
+                    [0, 1, 1],
+                    [0, 0, 1]])
+
+    B7c = np.array([[1, 0, 0],
+                    [1, 0, 0],
+                    [1, 0, 0]])
+
+    B8 = np.array([[0, 0, 0],
+                    [0, 1, 1],
+                    [0, 1, 1]])
+
+    B8c = np.array([[1, 1, 0],
+                    [1, 0, 0],
+                    [0, 0, 0]])
+    structural_elements = [
+        [B1, B1c], 
+        [B2, B2c], 
+        [B3, B3c], 
+        [B4, B4c], 
+        [B5, B5c], 
+        [B6, B6c], 
+        [B7, B7c], 
+        [B8, B8c]]
+    return structural_elements[param]
+
+def region_growing(image, seed, threshold, criterion=0):
+    """
+    Perform region growing on an image starting from a seed point.
+
+    Parameters:
+        image (numpy.ndarray): Input image (H x W x C) where C is the number of channels (e.g., 3 for RGB).
+        seedX (int): X-coordinate of the seed point.
+        seedY (int): Y-coordinate of the seed point.
+        threshold (float): Threshold value for similarity criterion (0 for binary images).
+        criterion (int): Distance criterion:
+                        0 - Euclidean distance
+                        1 - Manhattan distance
+                        2 - Maximum absolute difference
+
+    Returns:
+        numpy.ndarray: Binary image (H x W) with the grown region marked as 255 (white).
+    """
+    image = np.array(image, dtype=np.int16)
+
+    seedX = seed[0]
+    seedY = seed[1]
+
+    # Initialize the result binary image
+    result = np.zeros_like(image, dtype=np.int16)
+
+    # Seed pixel intensity
+    seed_value = int(image[seedY, seedX])  # Cast seed value to int for arithmetic operations
+    result[seedY, seedX] = 255  # Mark seed point as part of the region
+
+    print(f"Seed Value at ({seedX}, {seedY}): {seed_value}")
+
+    # Directions for 8-connectivity
+    dx = [-1, 1, 0, 0, -1, 1, -1, 1]
+    dy = [0, 0, -1, 1, -1, -1, 1, 1]
+
+    # Queue for BFS
+    pixel_queue = [(seedX, seedY)]
+
+    while pixel_queue:
+        x, y = pixel_queue.pop(0)
+
+        # Check all 8 neighbors
+        for i in range(8):
+            nx = x + dx[i]
+            ny = y + dy[i]
+
+            # Ensure the neighbor is within bounds and not yet visited
+            if 0 <= nx < image.shape[1] and 0 <= ny < image.shape[0] and result[ny, nx] == 0:
+                neighbor_value = int(image[ny, nx])  # Cast to int for arithmetic operations
+
+                distance = 0
+                # Compute the distance based on the chosen criterion
+                if criterion == 0:  # Euclidean distance
+                    distance = abs(neighbor_value - seed_value)
+                elif criterion == 1:  # Manhattan distance
+                    distance = abs(neighbor_value - seed_value)
+                elif criterion == 2:  # Maximum absolute difference
+                    distance = abs(neighbor_value - seed_value)
+
+                # Check if the distance is within the threshold
+                if distance <= threshold:
+                    result[ny, nx] = 255  # Add to the region
+                    pixel_queue.append((nx, ny))  # Add to the queue
+
+    result = np.array(image, dtype=np.uint8)
+
+    return result
+
+def seed_points():
+    seed_points = (320, 505)  # Example seed points
+    return seed_points
+
+def threshold():
+    threshold = 50  # Example threshold for region growing
+    return threshold
+
+
 ### CMD commands
 def main():
     if len(sys.argv) < 3:
@@ -537,7 +927,7 @@ def main():
 
     # Load the image
     try:
-        matrix = imagineLoader(image_path)
+        matrix = imageLoader(image_path)
     except FileNotFoundError:
         print(f"Error: File {image_path} not found.")
         sys.exit(1)
@@ -694,7 +1084,7 @@ def main():
             print("Usage: python script.py --mse <image_path> <image2_path>")
             sys.exit(1)
         try:
-            matrix_f = imagineLoader(output_path)
+            matrix_f = imageLoader(output_path)
             print(mse(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
@@ -705,7 +1095,7 @@ def main():
             print("Usage: python script.py --pmse <image_path> <image2_path>")
             sys.exit(1)
         try:
-            matrix_f = imagineLoader(output_path)
+            matrix_f = imageLoader(output_path)
             print(pmse(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
@@ -716,7 +1106,7 @@ def main():
             print("Usage: python script.py --snr <image_path> <image2_path>")
             sys.exit(1)
         try:
-            matrix_f = imagineLoader(output_path)
+            matrix_f = imageLoader(output_path)
             print(snr(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
@@ -727,7 +1117,7 @@ def main():
             print("Usage: python script.py --psnr <image_path> <image2_path>")
             sys.exit(1)
         try:
-            matrix_f = imagineLoader(output_path)
+            matrix_f = imageLoader(output_path)
             print(psnr(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
@@ -738,7 +1128,7 @@ def main():
             print("Usage: python script.py --md <image_path> <image2_path>")
             sys.exit(1)
         try:
-            matrix_f = imagineLoader(output_path)
+            matrix_f = imageLoader(output_path)
             print(md(matrix, matrix_f))
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
@@ -750,8 +1140,8 @@ def main():
             sys.exit(1)
         try:
             origin_path = sys.argv[3]
-            matrix_o = imagineLoader(origin_path)
-            matrix_f = imagineLoader(output_path)
+            matrix_o = imageLoader(origin_path)
+            matrix_f = imageLoader(output_path)
             print(':Original:')
             print(mse(matrix, matrix_o))
             print(pmse(matrix, matrix_o))
@@ -964,6 +1354,153 @@ def main():
             print("Error processing the image.")
             sys.exit(1)
             
+
+    ## Task 3
+
+    elif command =='--dilation':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --dilation <image_path> <struct_element> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_number = int(sys.argv[3])
+            modified_matrix = dilation(matrix, structural_elements(struct_number))
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--erosion':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --erosion <image_path> <struct_element> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_number = int(sys.argv[3])
+            modified_matrix = erosion(matrix, structural_elements(struct_number))
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--opening':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --opening <image_path> <struct_element> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_number = int(sys.argv[3])
+            modified_matrix = opening(matrix, structural_elements(struct_number))
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--closing':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --closing <image_path> <struct_element> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_number = int(sys.argv[3])
+            modified_matrix = closing(matrix, structural_elements(struct_number))
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--hmt':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --hmt <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_B1 = int(sys.argv[3])
+            struct_B2 = int(sys.argv[4])
+            modified_matrix = hmt(matrix, structural_elements(struct_B1), structural_elements(struct_B2) )
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--successive_n':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --successive_n <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            struct_B1 = int(sys.argv[3])
+            struct_B2 = int(sys.argv[4])
+            modified_matrix = successive_n_transform(matrix, structural_elements(struct_B1), structural_elements(struct_B2) )
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--region_growing':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --region_growing <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+            sys.exit(1)
+
+        try:
+            matrix = imageLoader1B(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+
+        try:
+            tseed_points = int(sys.argv[3])
+            tthreshold = int(sys.argv[4])
+            modified_matrix = region_growing(matrix, seed_points(), threshold())
+            saveImage1B(modified_matrix,output_path)
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+
     elif command =='--help':
         print("List of commands:")
         print("--brightnessFlat     | Usage: python script.py --brightnessFlat <image_path> <brightness_value> <output_path>")
