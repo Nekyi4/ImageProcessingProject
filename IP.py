@@ -686,7 +686,7 @@ def closing(image, struct_element):
     closed = erosion(dilated, struct_element)
     return closed
 
-def hmt(image, struct_element_B1, struct_element_B2):
+def hmt(image, struct_element):
     """
     Perform Hit-or-Miss Transformation (HMT) on a binary image.
     :param image: 2D binary image
@@ -694,6 +694,8 @@ def hmt(image, struct_element_B1, struct_element_B2):
     :param struct_element_B2: Background structural element (B2, complement)
     :return: HMT-transformed image
     """
+    struct_element_B1 = struct_element[0]
+    struct_element_B2 = struct_element[1]
     eroded_B1 = erosion(image, struct_element_B1)
     eroded_B2 = erosion(1 - image, struct_element_B2)
     return eroded_B1 & eroded_B2
@@ -1427,8 +1429,8 @@ def main():
             sys.exit(1)
 
     elif command =='--hmt':
-        if len(sys.argv) != 6:
-            print("Usage: python script.py --hmt <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --hmt <image_path> <struct_element> <output_path>")
             sys.exit(1)
 
         try:
@@ -1438,9 +1440,8 @@ def main():
             sys.exit(1)
 
         try:
-            struct_B1 = int(sys.argv[3])
-            struct_B2 = int(sys.argv[4])
-            modified_matrix = hmt(matrix, structural_elements(struct_B1), structural_elements(struct_B2) )
+            struct_B = int(sys.argv[3])
+            modified_matrix = hmt(matrix, structural_elements_XII(struct_B))
             saveImage1B(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
@@ -1448,8 +1449,8 @@ def main():
             sys.exit(1)
     
     elif command =='--successive_n':
-        if len(sys.argv) != 6:
-            print("Usage: python script.py --successive_n <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --successive_n <image_path> <struct_element> <output_path>")
             sys.exit(1)
 
         try:
@@ -1459,9 +1460,8 @@ def main():
             sys.exit(1)
 
         try:
-            struct_B1 = int(sys.argv[3])
-            struct_B2 = int(sys.argv[4])
-            modified_matrix = successive_n_transform(matrix, structural_elements(struct_B1), structural_elements(struct_B2) )
+            struct_B = int(sys.argv[3])
+            modified_matrix = successive_n_transform(matrix, structural_elements_XII(struct_B))
             saveImage1B(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
