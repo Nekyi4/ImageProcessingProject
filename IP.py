@@ -660,7 +660,7 @@ def erosion(image, struct_element):
             if match:
                 output_image[i][j] = 1  # Set output pixel to 1 if full match found
 
-    output_image = np.array(output_image)
+    output_image = np.array(output_image, dtype=np.uint8)
     return output_image
 
 
@@ -700,7 +700,7 @@ def hmt(image, struct_element):
     eroded_B2 = erosion(1 - image, struct_element_B2)
     return eroded_B1 & eroded_B2
 
-def successive_n_transform(image, struct_elements, n=8):
+def successive_n_transform(image, struct_elements):
     """
     Apply the successive morphological transformations N(A, {B1, ..., Bn})
     :param image: 2D binary image
@@ -708,12 +708,35 @@ def successive_n_transform(image, struct_elements, n=8):
     :param n: Number of iterations
     :return: Transformed image
     """
-    for _ in range(n):
+
+    
+    for i in range(2):
         for se in struct_elements:
             new_image = image.copy()
-            new_image = erosion(new_image, se)
+            new_image = erosion(new_image, se[0])
             image = np.where(image != new_image, new_image, image)  # Update only where changes occur
     return image
+    
+
+    '''
+    changes_made = True  # Flag to track if any changes were made
+
+    while changes_made:
+        changes_made = False  # Reset flag at the beginning of each iteration
+
+        for se in struct_elements:
+            new_image = image.copy()
+            new_image = erosion(new_image, se[0])  # Apply erosion with the first element of the pair
+            updated_image = np.where(image != new_image, new_image, image)  # Update only where changes occur
+
+            # Check if there was any change
+            if not np.array_equal(image, updated_image):
+                changes_made = True
+
+            image = updated_image  # Update the image for the next iteration
+
+    return image
+    '''
 
 def structural_elements(param):
     # Define sample structural elements (as binary numpy arrays)
@@ -761,7 +784,34 @@ def structural_elements(param):
     structural_elements = [B1, B2, B3, B4, B5, B6, B7, B8, B9, B10]
     return structural_elements[param]
 
-def structural_elements_XII(param):
+def structural_elements_XI(param):
+    B1 = np.array([[1, 0, 0],
+                [1, 0, 0],
+                [1, 0, 0]])
+
+    B2 = np.array([[1, 1, 1],
+                [0, 0, 0],
+                [0, 0, 0]])
+
+    B3 = np.array([[0, 0, 1],
+                [0, 0, 1],
+                [0, 0, 1]])
+
+    B4 = np.array([[0, 0, 0],
+                [0, 0, 0],
+                [1, 1, 1]])
+
+    BC = np.array([[0, 0, 0],
+                [0, 1, 0],
+                [0, 0, 0]])
+    structural_elements = [
+                    [B1, BC], 
+                    [B2, BC], 
+                    [B3, BC], 
+                    [B4, BC]]
+    return structural_elements[param]
+
+def structural_elements_XII():
 
     B1 = np.array([[0, 0, 0],
                 [0, 1, 0],
@@ -835,9 +885,9 @@ def structural_elements_XII(param):
         [B6, B6c], 
         [B7, B7c], 
         [B8, B8c]]
-    return structural_elements[param]
+    return structural_elements
 
-def region_growing(image, seed, threshold, criterion=0):
+def region_growing(image, seed, threshold, criterion):
     """
     Perform region growing on an image starting from a seed point.
 
@@ -904,9 +954,6 @@ def region_growing(image, seed, threshold, criterion=0):
 def seed_points():
     # Example of multiple seed points
     return [(50, 50), (100, 100), (320,450), (0,0)]  # List of seed points
-
-def threshold():
-    return 50
 
 
 ### CMD commands
@@ -1429,8 +1476,8 @@ def main():
             sys.exit(1)
 
     elif command =='--hmt':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --hmt <image_path> <struct_element> <output_path>")
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --hmt <image_path> <XI, or XII> <struct_element> <output_path>")
             sys.exit(1)
 
         try:
@@ -1440,8 +1487,12 @@ def main():
             sys.exit(1)
 
         try:
-            struct_B = int(sys.argv[3])
-            modified_matrix = hmt(matrix, structural_elements_XII(struct_B))
+            xval = int(sys.argv[3])
+            struct_B = int(sys.argv[4])
+            if(xval == 11):
+                modified_matrix = hmt(matrix, structural_elements_XI(struct_B))
+            else:
+                modified_matrix = hmt(matrix, structural_elements_XII()[struct_B])
             saveImage1B(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
@@ -1449,8 +1500,8 @@ def main():
             sys.exit(1)
     
     elif command =='--successive_n':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --successive_n <image_path> <struct_element> <output_path>")
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --successive_n <image_path> <output_path>")
             sys.exit(1)
 
         try:
@@ -1460,8 +1511,7 @@ def main():
             sys.exit(1)
 
         try:
-            struct_B = int(sys.argv[3])
-            modified_matrix = successive_n_transform(matrix, structural_elements_XII(struct_B))
+            modified_matrix = successive_n_transform(matrix, structural_elements_XII())
             saveImage1B(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
@@ -1469,8 +1519,8 @@ def main():
             sys.exit(1)
     
     elif command =='--region_growing':
-        if len(sys.argv) != 6:
-            print("Usage: python script.py --region_growing <image_path> <struct_elementB1> <struct_elementB2> <output_path>")
+        if len(sys.argv) != 7:
+            print("Usage: python script.py --region_growing <image_path> <seed_points> <threshold> <criterion> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoader(image_path)
@@ -1480,8 +1530,9 @@ def main():
 
         try:
             tseed_points = int(sys.argv[3])
-            tthreshold = int(sys.argv[4])
-            modified_matrix = region_growing(matrix, seed_points()[2], threshold())
+            threshold = int(sys.argv[4])
+            criterion = int(sys.argv[5])
+            modified_matrix = region_growing(matrix, seed_points()[tseed_points], threshold, criterion)
             saveImage(modified_matrix,output_path)
             sys.exit(1)
         except ValueError: 
