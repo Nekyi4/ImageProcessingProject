@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import time
 import cmath
+from math import cos, sin, pi
 
 ### Image processing
 
@@ -985,14 +986,35 @@ def perform_fft(image):
     Returns:
         tuple: (Fourier transform, magnitude spectrum, phase spectrum)
     """
-    rows, cols = image.shape
-    # Create the 2D Fourier Transform manually
-    row_fft = np.array([[np.sum(image[m, :] * np.exp(-2j * np.pi * n * np.arange(cols) / cols)) for n in range(cols)] for m in range(rows)])
-    fft_result = np.array([[np.sum(row_fft[:, k] * np.exp(-2j * np.pi * m * np.arange(rows) / rows)) for k in range(cols)] for m in range(rows)])
+    rows = len(image)
+    cols = len(image[0])
 
-    # Magnitude and phase
-    magnitude = np.abs(fft_result)
-    phase = np.angle(fft_result)
+    # Precompute twiddle factors for rows and columns
+    def precompute_twiddles(N):
+        return [[complex(cos(-2 * pi * k * n / N), sin(-2 * pi * k * n / N)) for n in range(N)] for k in range(N)]
+
+    row_twiddles = precompute_twiddles(cols)
+    col_twiddles = precompute_twiddles(rows)
+
+    # Helper function for 1D DFT using precomputed twiddles
+    def dft_1d(signal, twiddles):
+        N = len(signal)
+        return [sum(signal[n] * twiddles[k][n] for n in range(N)) for k in range(N)]
+
+    # Apply DFT row-wise
+    row_transformed = [dft_1d(row, row_twiddles) for row in image]
+
+    # Apply DFT column-wise
+    fft_result = [[0 for _ in range(cols)] for _ in range(rows)]
+    for col in range(cols):
+        column = [row_transformed[row][col] for row in range(rows)]
+        transformed_column = dft_1d(column, col_twiddles)
+        for row in range(rows):
+            fft_result[row][col] = transformed_column[row]
+
+    # Compute magnitude and phase
+    magnitude = [[abs(fft_result[row][col]) for col in range(cols)] for row in range(rows)]
+    phase = [[cmath.phase(fft_result[row][col]) for col in range(cols)] for row in range(rows)]
 
     return fft_result, magnitude, phase
 
@@ -1006,12 +1028,39 @@ def perform_ifft(fft_data):
     Returns:
         ndarray: Reconstructed image in the spatial domain.
     """
-    rows, cols = fft_data.shape
-    # Perform inverse 2D Fourier Transform manually
-    col_ifft = np.array([[np.sum(fft_data[m, :] * np.exp(2j * np.pi * n * np.arange(cols) / cols)) for n in range(cols)] for m in range(rows)])
-    ifft_result = np.array([[np.sum(col_ifft[:, k] * np.exp(2j * np.pi * m * np.arange(rows) / rows)) for k in range(cols)] for m in range(rows)])
+    rows = len(fft_data)
+    cols = len(fft_data[0])
 
-    return np.real(ifft_result) / (rows * cols)
+    # Precompute twiddle factors for rows and columns
+    def precompute_twiddles(N):
+        return [[complex(cos(2 * pi * k * n / N), sin(2 * pi * k * n / N)) for n in range(N)] for k in range(N)]
+
+    row_twiddles = precompute_twiddles(cols)
+    col_twiddles = precompute_twiddles(rows)
+
+    # Helper function for 1D IFFT using precomputed twiddles
+    def idft_1d(signal, twiddles):
+        N = len(signal)
+        return [sum(signal[n] * twiddles[k][n] for n in range(N)) for k in range(N)]
+
+    # Apply IFFT column-wise (inverse of column-wise DFT)
+    col_ifft = [[0 for _ in range(cols)] for _ in range(rows)]
+    for col in range(cols):
+        column = [fft_data[row][col] for row in range(rows)]
+        transformed_column = idft_1d(column, col_twiddles)
+        for row in range(rows):
+            col_ifft[row][col] = transformed_column[row]
+
+    # Apply IFFT row-wise (inverse of row-wise DFT)
+    ifft_result = [[0 for _ in range(cols)] for _ in range(rows)]
+    for row in range(rows):
+        ifft_result[row] = idft_1d(col_ifft[row], row_twiddles)
+
+    # Normalize the result (divide by total number of elements)
+    scale_factor = rows * cols
+    reconstructed_image = [[ifft_result[row][col].real / scale_factor for col in range(cols)] for row in range(rows)]
+
+    return reconstructed_image
 
 # Function 2: Visualize Fourier Spectrum
 def visualize_spectrum(magnitude, phase):
@@ -1690,6 +1739,8 @@ def main():
             print("Error processing the image.")
             sys.exit(1)
 
+    #TASK 4
+
     elif command =='--Task4':
         if len(sys.argv) != 4:
             print("Usage: python script.py --Task4 <image_path> <output_path>")
@@ -1700,19 +1751,23 @@ def main():
             print(f"Error: File {image_path} not found.")
             sys.exit(1)
         try:
-            tseed_points = int(sys.argv[3])
-            threshold = int(sys.argv[4])
-            criterion = int(sys.argv[5])
+            print("Initial FFT")
             fft_result, magnitude, phase = perform_fft(matrix)
-            print("bon")
+            print("Saving Magnitude and Phase")
             saveImage(magnitude,"magnitude.bmp")
             saveImage(phase,"phase.bmp")
+            print("Creating Filter and Phase")
             Low_filter = create_filter(matrix.shape,filter_type="low-pass", band_params=(0.2))
+            print("Filtering fft")
             filtered_fft = apply_filter(fft_result, Low_filter)
+            print("IFFT")
             filtered_image = perform_ifft(filtered_fft)
             saveImage(filtered_image, "Filtered_image.bmp")
+            print("Creating Phase mask")
             phase_mask = create_phase_mask(matrix.shape, 2, 3)
+            print("Creating fft * phase mask")
             modified_fft = fft_result * phase_mask
+            print("IFFT")
             modified_image = perform_ifft(modified_fft)
             saveImage(modified_image, "Modified_image.bmp")
             sys.exit(1)
