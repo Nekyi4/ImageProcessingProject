@@ -2,6 +2,7 @@ from PIL import Image
 import numpy as np
 import sys
 import time
+import cmath
 
 ### Image processing
 
@@ -971,6 +972,143 @@ def seed_points():
     # Example of multiple seed points
     return [(50, 50), (100, 100), (320,450), (0,0)]  # List of seed points
 
+# TASK 4
+
+# Function 1: Perform direct and inverse FFT with decimation in the spatial domain
+def perform_fft(image):
+    """
+    Perform the Fast Fourier Transform (FFT) manually and return the Fourier spectrum.
+
+    Args:
+        image (ndarray): Input 2D image.
+
+    Returns:
+        tuple: (Fourier transform, magnitude spectrum, phase spectrum)
+    """
+    rows, cols = image.shape
+    # Create the 2D Fourier Transform manually
+    row_fft = np.array([[np.sum(image[m, :] * np.exp(-2j * np.pi * n * np.arange(cols) / cols)) for n in range(cols)] for m in range(rows)])
+    fft_result = np.array([[np.sum(row_fft[:, k] * np.exp(-2j * np.pi * m * np.arange(rows) / rows)) for k in range(cols)] for m in range(rows)])
+
+    # Magnitude and phase
+    magnitude = np.abs(fft_result)
+    phase = np.angle(fft_result)
+
+    return fft_result, magnitude, phase
+
+def perform_ifft(fft_data):
+    """
+    Perform the inverse Fast Fourier Transform (IFFT) manually and return the reconstructed image.
+
+    Args:
+        fft_data (ndarray): Fourier transform of the image.
+
+    Returns:
+        ndarray: Reconstructed image in the spatial domain.
+    """
+    rows, cols = fft_data.shape
+    # Perform inverse 2D Fourier Transform manually
+    col_ifft = np.array([[np.sum(fft_data[m, :] * np.exp(2j * np.pi * n * np.arange(cols) / cols)) for n in range(cols)] for m in range(rows)])
+    ifft_result = np.array([[np.sum(col_ifft[:, k] * np.exp(2j * np.pi * m * np.arange(rows) / rows)) for k in range(cols)] for m in range(rows)])
+
+    return np.real(ifft_result) / (rows * cols)
+
+# Function 2: Visualize Fourier Spectrum
+def visualize_spectrum(magnitude, phase):
+    """
+    Print basic statistics for the magnitude and phase spectrum.
+
+    Args:
+        magnitude (ndarray): Magnitude of the Fourier spectrum.
+        phase (ndarray): Phase of the Fourier spectrum.
+    """
+    print("Magnitude Spectrum (min, max):", np.min(magnitude), np.max(magnitude))
+    print("Phase Spectrum (min, max):", np.min(phase), np.max(phase))
+
+# Function 3: Frequency-domain filters
+
+def create_filter(image_shape, filter_type, band_params=None, edge_direction=None):
+    """
+    Create a frequency-domain filter.
+
+    Args:
+        image_shape (tuple): Shape of the image (rows, cols).
+        filter_type (str): Type of filter ("low-pass", "high-pass", "band-pass", "band-cut", "edge-detect").
+        band_params (tuple): Frequency band parameters (low, high) as fractions of max frequency.
+        edge_direction (str): Direction for edge detection ("vertical", "horizontal").
+
+    Returns:
+        ndarray: Filter mask.
+    """
+    rows, cols = image_shape
+    crow, ccol = rows // 2, cols // 2  # Center of the frequency domain
+
+    y, x = np.ogrid[:rows, :cols]
+    distance = np.sqrt((x - ccol)**2 + (y - crow)**2)
+
+    # Create filter mask
+    if filter_type == "low-pass":
+        radius = band_params[0] * max(rows, cols)
+        mask = distance <= radius
+
+    elif filter_type == "high-pass":
+        radius = band_params[0] * max(rows, cols)
+        mask = distance > radius
+
+    elif filter_type == "band-pass":
+        low_radius = band_params[0] * max(rows, cols)
+        high_radius = band_params[1] * max(rows, cols)
+        mask = (distance >= low_radius) & (distance <= high_radius)
+
+    elif filter_type == "band-cut":
+        low_radius = band_params[0] * max(rows, cols)
+        high_radius = band_params[1] * max(rows, cols)
+        mask = ~((distance >= low_radius) & (distance <= high_radius))
+
+    elif filter_type == "edge-detect":
+        if edge_direction == "vertical":
+            mask = np.abs(x - ccol) >= band_params[0] * cols
+        elif edge_direction == "horizontal":
+            mask = np.abs(y - crow) >= band_params[0] * rows
+        else:
+            raise ValueError("Invalid edge direction. Choose 'vertical' or 'horizontal'.")
+
+    else:
+        raise ValueError("Invalid filter type.")
+
+    return mask.astype(float)
+
+def apply_filter(fft_data, filter_mask):
+    """
+    Apply a frequency-domain filter to the Fourier transform of an image.
+
+    Args:
+        fft_data (ndarray): Fourier transform of the image.
+        filter_mask (ndarray): Frequency-domain filter mask.
+
+    Returns:
+        ndarray: Filtered Fourier transform.
+    """
+    return fft_data * filter_mask
+
+# Function 4: Phase-modifying filter
+def create_phase_mask(image_shape, k, l):
+    """
+    Create a phase-modifying filter mask P(n, m).
+
+    Args:
+        image_shape (tuple): Shape of the image (N, M).
+        k (int): Integer parameter for the mask.
+        l (int): Integer parameter for the mask.
+
+    Returns:
+        ndarray: Phase-modifying mask.
+    """
+    N, M = image_shape
+    y, x = np.meshgrid(range(N), range(M), indexing="ij")
+    phase = -2 * np.pi * (k * x / M + l * y / N) + (k + l) * np.pi
+    mask = np.exp(1j * phase)
+    return mask
 
 ### CMD commands
 def main():
@@ -1552,6 +1690,35 @@ def main():
             print("Error processing the image.")
             sys.exit(1)
 
+    elif command =='--Task4':
+        if len(sys.argv) != 4:
+            print("Usage: python script.py --Task4 <image_path> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoader(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            tseed_points = int(sys.argv[3])
+            threshold = int(sys.argv[4])
+            criterion = int(sys.argv[5])
+            fft_result, magnitude, phase = perform_fft(matrix)
+            print("bon")
+            saveImage(magnitude,"magnitude.bmp")
+            saveImage(phase,"phase.bmp")
+            Low_filter = create_filter(matrix.shape,filter_type="low-pass", band_params=(0.2))
+            filtered_fft = apply_filter(fft_result, Low_filter)
+            filtered_image = perform_ifft(filtered_fft)
+            saveImage(filtered_image, "Filtered_image.bmp")
+            phase_mask = create_phase_mask(matrix.shape, 2, 3)
+            modified_fft = fft_result * phase_mask
+            modified_image = perform_ifft(modified_fft)
+            saveImage(modified_image, "Modified_image.bmp")
+            sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
 
     elif command =='--help':
         print("List of commands:")
