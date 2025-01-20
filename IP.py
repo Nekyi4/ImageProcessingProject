@@ -1837,7 +1837,7 @@ def main():
 
     #TASK 4
 
-    elif command =='--Task4':
+    elif command =='--FFS':
         if len(sys.argv) != 4:
             print("Usage: python script.py --Task4 <image_path> <output_path>")
             sys.exit(1)
@@ -1866,6 +1866,129 @@ def main():
             image_phase_modulated = phase_modulation(matrix, 2, 3)
             saveImage(image_phase_modulated, "Modified_phase_image.bmp")
             sys.exit(1)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--low_pass':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            radius = int(sys.argv[3])
+            print("Creating Filtered image")
+            image_low_pass = low_pass_filter(matrix, radius)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--high_pass':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            radius = int(sys.argv[3])
+            print("Creating Filtered image")
+            image_low_pass = high_pass_filter(matrix, radius)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--high_pass_edge':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            radius = int(sys.argv[3])
+            print("Creating Filtered image")
+            image_low_pass = high_pass_edge_detection(matrix, radius)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--band_pass':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --Task4 <image_path> <low_radius> <high_radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            low_radius = int(sys.argv[3])
+            high_radius = int(sys.argv[4])
+            print("Creating Filtered image")
+            image_low_pass = band_pass_filter(matrix, low_radius, high_radius)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+    
+    elif command =='--band_cut':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --Task4 <image_path> <low_radius> <high_radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            low_radius = int(sys.argv[3])
+            high_radius = int(sys.argv[4])
+            print("Creating Filtered image")
+            image_low_pass = band_cut(matrix, low_radius, high_radius)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
+    elif command =='--phase_modulation':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --Task4 <image_path> <k> <l> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            k = int(sys.argv[3])
+            l = int(sys.argv[4])
+            print("Creating Filtered image")
+            image_low_pass = phase_modulation(matrix, k, l)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
