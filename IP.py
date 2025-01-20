@@ -14,6 +14,13 @@ def imageLoader(param):
     image_arr = np.array(im, dtype=np.uint8)
     return image_arr
 
+def imageLoaderG(param):
+    im = Image.open(param)
+    if im.mode != 'L':
+        im = im.convert('L')
+    image_arr = np.array(im, dtype=np.uint8)
+    return image_arr
+
 def saveImage(image_matrix, output_path):
     if image_matrix.dtype != np.uint8:
         image_matrix = np.clip(image_matrix, 0, 255).astype(np.uint8)
@@ -170,15 +177,30 @@ def negative(image_matrix):
     return output_matrix
 
 def flipHorizontal(image_matrix):
-    height, width, channels = image_matrix.shape
-    output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
-    for i in range(height):
-        for j in range(width):
+    # Check if the image has 3 channels (RGB)
+    if len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
                 output_matrix[i, j] = image_matrix[i, width - j - 1]
+    # If the image is grayscale (single channel)
+    elif len(image_matrix.shape) == 2:
+        height, width = image_matrix.shape
+        output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                output_matrix[i, j] = image_matrix[i, width - j - 1]
+    else:
+        raise ValueError("Input image must be either grayscale or RGB.")
+
     return output_matrix
 
 def flipVertical(image_matrix):
-    height, width, channels = image_matrix.shape
+    if len(image_matrix.shape) == 3:
+        height, width, channels = image_matrix.shape
+    else:
+        height, width = image_matrix.shape
     output_matrix = np.zeros_like(image_matrix, dtype=np.uint8)
     for i in range(height):
         for j in range(width):
@@ -975,189 +997,263 @@ def seed_points():
 
 # TASK 4
 
-# Function 1: Perform direct and inverse FFT with decimation in the spatial domain
-def perform_fft(image):
-    """
-    Perform the Fast Fourier Transform (FFT) manually and return the Fourier spectrum.
+def precompute_twiddles(N):
+    """Precompute twiddle factors for FFT and IFFT, using NumPy for efficiency."""
+    # Create a 2D array for twiddles (rows x columns)
+    twiddles = np.zeros((N, N), dtype=complex)
+    for k in range(N):
+        for n in range(N):
+            twiddles[k, n] = cmath.exp(-2j * np.pi * k * n / N)
+    return twiddles
 
+def dft_1d(signal, twiddles):
+    """Compute the 1D DFT using precomputed twiddles, using matrix multiplication for efficiency."""
+    return np.dot(twiddles, signal)
+
+def fft_2d(image):
+    """
+    Perform a 2D FFT on the image (row-wise then column-wise).
     Args:
-        image (ndarray): Input 2D image.
-
+        image (ndarray): Input 2D image (real-valued).
     Returns:
-        tuple: (Fourier transform, magnitude spectrum, phase spectrum)
+        tuple: (Fourier transform result, magnitude spectrum, phase spectrum)
     """
-    rows = len(image)
-    cols = len(image[0])
+    image = image.astype(np.float64)  # Convert to float64 for precision
+    rows, cols = image.shape
 
-    # Precompute twiddle factors for rows and columns
-    def precompute_twiddles(N):
-        return [[complex(cos(-2 * pi * k * n / N), sin(-2 * pi * k * n / N)) for n in range(N)] for k in range(N)]
-
+    # Precompute twiddles
     row_twiddles = precompute_twiddles(cols)
     col_twiddles = precompute_twiddles(rows)
 
-    # Helper function for 1D DFT using precomputed twiddles
-    def dft_1d(signal, twiddles):
-        N = len(signal)
-        return [sum(signal[n] * twiddles[k][n] for n in range(N)) for k in range(N)]
+    # Apply DFT row-wise using vectorized approach
+    row_transformed = np.array([dft_1d(row, row_twiddles) for row in image])
 
-    # Apply DFT row-wise
-    row_transformed = [dft_1d(row, row_twiddles) for row in image]
+    # Apply DFT column-wise using vectorized approach
+    fft_result = np.array([dft_1d(col, col_twiddles) for col in row_transformed.T]).T
 
-    # Apply DFT column-wise
-    fft_result = [[0 for _ in range(cols)] for _ in range(rows)]
-    for col in range(cols):
-        column = [row_transformed[row][col] for row in range(rows)]
-        transformed_column = dft_1d(column, col_twiddles)
-        for row in range(rows):
-            fft_result[row][col] = transformed_column[row]
+    # Return the result shifted to center the low frequencies
+    fft_result = np.fft.fftshift(fft_result)
 
     # Compute magnitude and phase
-    magnitude = [[abs(fft_result[row][col]) for col in range(cols)] for row in range(rows)]
-    phase = [[cmath.phase(fft_result[row][col]) for col in range(cols)] for row in range(rows)]
+    magnitude = np.abs(fft_result)
+    phase = np.angle(fft_result)
 
     return fft_result, magnitude, phase
 
-def perform_ifft(fft_data):
-    """
-    Perform the inverse Fast Fourier Transform (IFFT) manually and return the reconstructed image.
 
+
+def ifft_2d(fft_data):
+    """
+    Perform the 2D inverse FFT (IFFT) on the Fourier transformed image.
     Args:
-        fft_data (ndarray): Fourier transform of the image.
-
+        fft_data (ndarray): Fourier transformed image (complex).
     Returns:
-        ndarray: Reconstructed image in the spatial domain.
+        ndarray: Reconstructed image in the spatial domain (real-valued).
     """
-    rows = len(fft_data)
-    cols = len(fft_data[0])
+    # Shift the frequencies back to the original position before performing IFFT
+    fft_data = np.fft.ifftshift(fft_data)
 
-    # Precompute twiddle factors for rows and columns
-    def precompute_twiddles(N):
-        return [[complex(cos(2 * pi * k * n / N), sin(2 * pi * k * n / N)) for n in range(N)] for k in range(N)]
+    rows, cols = fft_data.shape
 
+    # Precompute twiddles
     row_twiddles = precompute_twiddles(cols)
     col_twiddles = precompute_twiddles(rows)
 
-    # Helper function for 1D IFFT using precomputed twiddles
-    def idft_1d(signal, twiddles):
-        N = len(signal)
-        return [sum(signal[n] * twiddles[k][n] for n in range(N)) for k in range(N)]
+    # Apply IFFT column-wise using vectorized approach
+    col_ifft = np.array([dft_1d(fft_data[:, col], col_twiddles) for col in range(cols)]).T
 
-    # Apply IFFT column-wise (inverse of column-wise DFT)
-    col_ifft = [[0 for _ in range(cols)] for _ in range(rows)]
-    for col in range(cols):
-        column = [fft_data[row][col] for row in range(rows)]
-        transformed_column = idft_1d(column, col_twiddles)
-        for row in range(rows):
-            col_ifft[row][col] = transformed_column[row]
+    # Apply IFFT row-wise using vectorized approach
+    ifft_result = np.array([dft_1d(col_ifft[row], row_twiddles) for row in range(rows)]) / (rows * cols)
 
-    # Apply IFFT row-wise (inverse of row-wise DFT)
-    ifft_result = [[0 for _ in range(cols)] for _ in range(rows)]
-    for row in range(rows):
-        ifft_result[row] = idft_1d(col_ifft[row], row_twiddles)
+    # Return the real part (since it's a real-valued image)
+    return np.real(ifft_result)
 
-    # Normalize the result (divide by total number of elements)
-    scale_factor = rows * cols
-    reconstructed_image = [[ifft_result[row][col].real / scale_factor for col in range(cols)] for row in range(rows)]
-
-    return reconstructed_image
-
-# Function 2: Visualize Fourier Spectrum
-def visualize_spectrum(magnitude, phase):
+def low_pass_filter(image, radius):
     """
-    Print basic statistics for the magnitude and phase spectrum.
-
+    Apply a low-pass filter in the frequency domain.
     Args:
-        magnitude (ndarray): Magnitude of the Fourier spectrum.
-        phase (ndarray): Phase of the Fourier spectrum.
-    """
-    print("Magnitude Spectrum (min, max):", np.min(magnitude), np.max(magnitude))
-    print("Phase Spectrum (min, max):", np.min(phase), np.max(phase))
-
-# Function 3: Frequency-domain filters
-
-def create_filter(image_shape, filter_type, band_params=None, edge_direction=None):
-    """
-    Create a frequency-domain filter.
-
-    Args:
-        image_shape (tuple): Shape of the image (rows, cols).
-        filter_type (str): Type of filter ("low-pass", "high-pass", "band-pass", "band-cut", "edge-detect").
-        band_params (tuple): Frequency band parameters (low, high) as fractions of max frequency.
-        edge_direction (str): Direction for edge detection ("vertical", "horizontal").
-
+        image (ndarray): Input image (real-valued).
+        radius (int): Cutoff radius for the low-pass filter.
     Returns:
-        ndarray: Filter mask.
+        ndarray: Filtered image (real-valued).
     """
-    rows, cols = image_shape
-    crow, ccol = rows // 2, cols // 2  # Center of the frequency domain
+    fft_result, _, _ = fft_2d(image)  # Get FFT result and shift it to center
 
-    y, x = np.ogrid[:rows, :cols]
-    distance = np.sqrt((x - ccol)**2 + (y - crow)**2)
+    rows, cols = fft_result.shape
 
-    # Create filter mask
-    if filter_type == "low-pass":
-        radius = band_params[0] * max(rows, cols)
-        mask = distance <= radius
+    # Center coordinates for the frequency domain
+    center_x, center_y = cols // 2, rows // 2
+    
+    # Apply a mask to filter out high frequencies
+    for x in range(cols):
+        for y in range(rows):
+            dist = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+            if dist > radius:
+                fft_result[y, x] = 0  # Zero out high frequencies
 
-    elif filter_type == "high-pass":
-        radius = band_params[0] * max(rows, cols)
-        mask = distance > radius
+    # Return the filtered image after inverse FFT
+    return ifft_2d(fft_result)
 
-    elif filter_type == "band-pass":
-        low_radius = band_params[0] * max(rows, cols)
-        high_radius = band_params[1] * max(rows, cols)
-        mask = (distance >= low_radius) & (distance <= high_radius)
-
-    elif filter_type == "band-cut":
-        low_radius = band_params[0] * max(rows, cols)
-        high_radius = band_params[1] * max(rows, cols)
-        mask = ~((distance >= low_radius) & (distance <= high_radius))
-
-    elif filter_type == "edge-detect":
-        if edge_direction == "vertical":
-            mask = np.abs(x - ccol) >= band_params[0] * cols
-        elif edge_direction == "horizontal":
-            mask = np.abs(y - crow) >= band_params[0] * rows
-        else:
-            raise ValueError("Invalid edge direction. Choose 'vertical' or 'horizontal'.")
-
-    else:
-        raise ValueError("Invalid filter type.")
-
-    return mask.astype(float)
-
-def apply_filter(fft_data, filter_mask):
+def high_pass_filter(image, radius):
     """
-    Apply a frequency-domain filter to the Fourier transform of an image.
-
+    Apply a high-pass filter in the frequency domain.
     Args:
-        fft_data (ndarray): Fourier transform of the image.
-        filter_mask (ndarray): Frequency-domain filter mask.
-
+        image (ndarray): Input image (real-valued).
+        radius (int): Cutoff radius for the high-pass filter.
     Returns:
-        ndarray: Filtered Fourier transform.
+        ndarray: Filtered image (real-valued).
     """
-    return fft_data * filter_mask
+    fft_result, _, _ = fft_2d(image)
+    rows, cols = fft_result.shape
 
-# Function 4: Phase-modifying filter
-def create_phase_mask(image_shape, k, l):
+    # Zero out frequencies inside the cutoff radius
+    center_x, center_y = cols // 2, rows // 2
+    for x in range(cols):
+        for y in range(rows):
+            if np.sqrt((x - center_x)**2 + (y - center_y)**2) <= radius:
+                fft_result[y, x] = 0
+
+    return ifft_2d(fft_result)
+
+def band_pass_filter(image, low_radius, high_radius):
     """
-    Create a phase-modifying filter mask P(n, m).
-
+    Apply a band-pass filter in the frequency domain.
     Args:
-        image_shape (tuple): Shape of the image (N, M).
-        k (int): Integer parameter for the mask.
-        l (int): Integer parameter for the mask.
-
+        image (ndarray): Input image (real-valued).
+        low_radius (int): Lower cutoff radius.
+        high_radius (int): Upper cutoff radius.
     Returns:
-        ndarray: Phase-modifying mask.
+        ndarray: Filtered image (real-valued).
     """
-    N, M = image_shape
-    y, x = np.meshgrid(range(N), range(M), indexing="ij")
-    phase = -2 * np.pi * (k * x / M + l * y / N) + (k + l) * np.pi
-    mask = np.exp(1j * phase)
-    return mask
+    fft_result, _, _ = fft_2d(image)
+    rows, cols = fft_result.shape
+
+    # Zero out frequencies outside the band-pass range
+    center_x, center_y = cols // 2, rows // 2
+    for x in range(cols):
+        for y in range(rows):
+            distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+            if distance < low_radius or distance > high_radius:
+                fft_result[y, x] = 0
+
+    return ifft_2d(fft_result)
+
+def band_cut(image, low, high):
+    """
+    Apply band-cut filter by removing frequencies in the specified band.
+    
+    Args:
+        image (ndarray): Input image.
+        low (float): Lower frequency cutoff.
+        high (float): Upper frequency cutoff.
+        
+    Returns:
+        ndarray: Image after band-cut filtering in the frequency domain.
+    """
+    # Perform FFT and get the frequency domain representation
+    fft_data, _, _ = perform_fft(image)
+    
+    rows, cols = fft_data.shape
+    center_x, center_y = cols // 2, rows // 2
+    
+    # Band-cut in frequency domain: Remove frequencies within the specified band
+    for y in range(rows):
+        for x in range(cols):
+            distance = np.hypot(x - center_x, y - center_y)
+            if low <= distance <= high:
+                fft_data[y, x] = 0  # Set frequencies in the band to zero
+    
+    # Inverse FFT to transform back to the spatial domain
+    return perform_ifft(fft_data)
+
+def high_pass_edge_detection(image, radius):
+    """
+    Apply high-pass filter in the frequency domain and return the image after edge detection.
+    
+    Args:
+        image (ndarray): Input image.
+        radius (int): Radius for high-pass filtering (frequencies below this radius will be removed).
+        
+    Returns:
+        ndarray: Image after high-pass edge detection.
+    """
+    # Perform FFT and get the frequency domain representation
+    fft_data, _, _ = perform_fft(image)
+    
+    rows, cols = fft_data.shape
+    center_x, center_y = cols // 2, rows // 2
+    
+    # High-pass filter: Set frequencies below the specified radius to zero
+    for y in range(rows):
+        for x in range(cols):
+            distance = np.hypot(x - center_x, y - center_y)
+            if distance <= radius:
+                fft_data[y, x] = 0  # Remove low-frequency components
+    
+    # Inverse FFT to transform back to the spatial domain
+    return perform_ifft(fft_data)
+
+def phase_modulation(image, k, l):
+    """
+    Apply phase modulation in the frequency domain.
+    
+    Args:
+        image (ndarray): Input image.
+        k (int): Modulation factor for the horizontal direction.
+        l (int): Modulation factor for the vertical direction.
+        
+    Returns:
+        ndarray: Image after phase modulation.
+    """
+    # Perform FFT and get the frequency domain representation
+    fft_data, _, phase = perform_fft(image)
+    
+    rows, cols = fft_data.shape
+    center_x, center_y = cols // 2, rows // 2
+    
+    # Apply phase modulation by shifting the phase spectrum
+    for y in range(rows):
+        for x in range(cols):
+            phase_shift = -((x * k * 2 * np.pi) / cols) - ((y * l * 2 * np.pi) / rows) + (k + l) * np.pi
+            fft_data[y, x] *= np.exp(1j * phase_shift)  # Apply the phase shift in frequency domain
+    
+    # Inverse FFT to get the image after phase modulation
+    return perform_ifft(fft_data)
+
+def perform_fft(image):
+    """
+    Perform the Fourier Transform on an image and return its FFT data, magnitude, and phase.
+    
+    Args:
+        image (ndarray): Input image.
+        
+    Returns:
+        tuple: FFT data, magnitude, and phase of the Fourier transformed image.
+    """
+    # Apply FFT and shift zero frequency component to the center
+    fft_data = np.fft.fftshift(np.fft.fft2(image))
+    
+    # Compute the magnitude and phase from the complex FFT data
+    magnitude = np.abs(fft_data)
+    phase = np.angle(fft_data)
+    
+    return fft_data, magnitude, phase
+
+def perform_ifft(fft_data):
+    """
+    Perform the Inverse Fourier Transform to return the spatial domain image.
+    
+    Args:
+        fft_data (ndarray): Input FFT data (complex).
+        
+    Returns:
+        ndarray: Reconstructed image from the inverse FFT.
+    """
+    # Apply Inverse FFT and shift zero frequency component back to original position
+    ifft_data = np.fft.ifft2(np.fft.ifftshift(fft_data))
+    
+    ifft_data = np.real(ifft_data)  # Take the real part of the result
+    return np.clip(ifft_data, 0, 255)  # Clip to valid image range (0-255)
 
 ### CMD commands
 def main():
@@ -1746,30 +1842,29 @@ def main():
             print("Usage: python script.py --Task4 <image_path> <output_path>")
             sys.exit(1)
         try:
-            matrix = imageLoader(image_path)
+            matrix = imageLoaderG(image_path)
         except FileNotFoundError:
             print(f"Error: File {image_path} not found.")
             sys.exit(1)
         try:
             print("Initial FFT")
-            fft_result, magnitude, phase = perform_fft(matrix)
+            fft_result, magnitude, phase = fft_2d(matrix)
             print("Saving Magnitude and Phase")
-            saveImage(magnitude,"magnitude.bmp")
-            saveImage(phase,"phase.bmp")
+            print("Saving Magnitude...")
+            log_magnitude = np.log1p(magnitude)  # Log scale
+            normalized_magnitude = (log_magnitude / log_magnitude.max()) * 255
+            saveImage(normalized_magnitude, "magnitude.bmp")
+            print("Saving Phase...")
+            normalized_phase = ((phase + np.pi) / (2 * np.pi)) * 255
+            saveImage(normalized_phase, "phase.bmp")
             print("Creating Filter and Phase")
-            Low_filter = create_filter(matrix.shape,filter_type="low-pass", band_params=(0.2))
-            print("Filtering fft")
-            filtered_fft = apply_filter(fft_result, Low_filter)
-            print("IFFT")
-            filtered_image = perform_ifft(filtered_fft)
-            saveImage(filtered_image, "Filtered_image.bmp")
+            image_low_pass = low_pass_filter(matrix, 15)
+            image_low_pass_fliped = flipVertical(image_low_pass)
+            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass_fliped, "Filtered_image.bmp")
             print("Creating Phase mask")
-            phase_mask = create_phase_mask(matrix.shape, 2, 3)
-            print("Creating fft * phase mask")
-            modified_fft = fft_result * phase_mask
-            print("IFFT")
-            modified_image = perform_ifft(modified_fft)
-            saveImage(modified_image, "Modified_image.bmp")
+            image_phase_modulated = phase_modulation(matrix, 2, 3)
+            saveImage(image_phase_modulated, "Modified_phase_image.bmp")
             sys.exit(1)
         except ValueError: 
             print("Error processing the image.")
