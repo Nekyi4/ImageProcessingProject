@@ -2,7 +2,6 @@ from PIL import Image
 import numpy as np
 import sys
 import time
-from queue import Queue
 
 ### Image processing
 
@@ -14,6 +13,8 @@ def imageLoader(param):
     return image_arr
 
 def saveImage(image_matrix, output_path):
+    if image_matrix.dtype != np.uint8:
+        image_matrix = np.clip(image_matrix, 0, 255).astype(np.uint8)
     new_image = Image.fromarray(image_matrix)
     new_image.save(output_path)
     print(f"Image saved at {output_path}")
@@ -40,7 +41,7 @@ def imageLoader1B(filepath):
     except Exception as e:
         print(f"Error loading image: {e}")
         return None
-
+    
 def saveImage1B(image_matrix, output_path):
     """
     Save a binary matrix as a grayscale image (0 -> black, 255 -> white).
@@ -468,7 +469,7 @@ def o_slaplace(image_matrix):
                 -image_matrix[p+1][q]    # Bottom
                 -image_matrix[p][q-1]    # Left
                 -image_matrix[p][q+1]    # Right
-                + 4 * image_matrix[p][q] # Center
+                + 5 * image_matrix[p][q] # Center
             )
             output_image[p][q] = conv_sum
 
@@ -709,17 +710,22 @@ def successive_n_transform(image, struct_elements):
     :return: Transformed image
     """
 
-    
-    for i in range(2):
+    height = len(image)
+    width = len(image[0])
+    for i in range(1):
         for se in struct_elements:
             new_image = image.copy()
-            new_image = erosion(new_image, se[0])
-            image = np.where(image != new_image, new_image, image)  # Update only where changes occur
+            new_image = hmt(new_image, se)
+            for i in range(height):
+                for j in range(width):
+                    if(new_image[i][j] == 1):
+                        image[i][j] = 0
+            ##image = np.where(image != new_image, new_image, image)  # Update only where changes occur
     return image
     
 
-    '''
-    changes_made = True  # Flag to track if any changes were made
+    
+    '''changes_made = True  # Flag to track if any changes were made
 
     while changes_made:
         changes_made = False  # Reset flag at the beginning of each iteration
@@ -735,8 +741,8 @@ def successive_n_transform(image, struct_elements):
 
             image = updated_image  # Update the image for the next iteration
 
-    return image
-    '''
+    return image'''
+    
 
 def structural_elements(param):
     # Define sample structural elements (as binary numpy arrays)
@@ -804,6 +810,7 @@ def structural_elements_XI(param):
     BC = np.array([[0, 0, 0],
                 [0, 1, 0],
                 [0, 0, 0]])
+    
     structural_elements = [
                     [B1, BC], 
                     [B2, BC], 
@@ -876,6 +883,14 @@ def structural_elements_XII():
     B8c = np.array([[1, 1, 0],
                     [1, 0, 0],
                     [0, 0, 0]])
+    
+    B9c  = np.array([[1, 1, 0],
+                [0, 1, 0],
+                [0, 1, 0]])
+    
+    B9 = np.array([[0, 0, 1],
+                    [1, 0, 1],
+                    [1, 0, 1]])
     structural_elements = [
         [B1, B1c], 
         [B2, B2c], 
@@ -884,7 +899,8 @@ def structural_elements_XII():
         [B5, B5c], 
         [B6, B6c], 
         [B7, B7c], 
-        [B8, B8c]]
+        [B8, B8c],
+        [B9, B9c]]
     return structural_elements
 
 def region_growing(image, seed, threshold, criterion):
@@ -1218,7 +1234,7 @@ def main():
 
     elif command == '--hrayleigh':
         if len(sys.argv) != 7:
-                print("Usage: python script.py --alpha <image_path> <gmin> <gmax> <alpha> <output_path>")
+                print("Usage: python script.py --hrayleigh <image_path> <gmin> <gmax> <alpha> <output_path>")
                 sys.exit(1)
         try:
             g_min = int(sys.argv[3])
@@ -1226,9 +1242,6 @@ def main():
             alpha = float(sys.argv[5])
             if g_min < 0 or g_max < 0:
                 print("G values must be bigger than 0")
-                sys.exit(1)
-            if (alpha < 0):
-                print("Alpha must be between 0 and 0.5.")
                 sys.exit(1)
             histogram_matrix = histogram(matrix)
             modified_matrix = hrayleigh(histogram_matrix, g_min, g_max, alpha)
@@ -1553,7 +1566,20 @@ def main():
         print('--enlarge            | Usage: python script.py --enlarge <image_path> <enlarge_factor> <output_path>')
         print('--alpha              | Usage: python script.py --alpha <image_path> <kernel_size> <alpha> <output_path>')
         print('--cmean              | Usage: python script.py --cmean <image_path> <kernel> <P> <output_path>')
-        print('--test               | Usage: python script.py --test <orignal_image_path> <noise_image_path> <filtered_image_path>')           
+        print('--test               | Usage: python script.py --test <orignal_image_path> <noise_image_path> <filtered_image_path>')   
+        print("--histogram          | Usage: python script.py --histogram <image_path> <channel> <output_path>")
+        print("--hrayleigh          | Usage: python script.py --hrayleigh <image_path> <gmin> <gmax> <alpha> <output_path>")        
+        print("--u_slaplace         | Usage: python script.py --u_slaplace <image_path> <mask_number> <output_path>")        
+        print("--o_slaplace         | Usage: python script.py --o_slaplace <image_path> <output_path>")        
+        print("--osobel             | Usage: python script.py --osobel <image_path> <output_path>")        
+        print("--test2              | Usage: python script.py --test2 <image_path> <output_path>")
+        print("--dilation           | Usage: python script.py --dilation <image_path> <struct_element> <output_path>")
+        print("--erosion            | Usage: python script.py --erosion <image_path> <struct_element> <output_path>")            
+        print("--opening            | Usage: python script.py --opening <image_path> <struct_element> <output_path>")            
+        print("--closing            | Usage: python script.py --closing <image_path> <struct_element> <output_path>")            
+        print("--hmt                | Usage: python script.py --hmt <image_path> <XI, or XII> <struct_element> <output_path>")            
+        print("--successive_n       | Usage: python script.py --successive_n <image_path> <output_path>")            
+        print("--region_growing       | Usage: python script.py --region_growing <image_path> <seed_points> <threshold> <criterion> <output_path>")            
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
