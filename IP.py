@@ -1103,16 +1103,21 @@ def high_pass_filter(image, radius):
     Returns:
         ndarray: Filtered image (real-valued).
     """
+    # Perform FFT on the image
     fft_result, _, _ = fft_2d(image)
     rows, cols = fft_result.shape
 
-    # Zero out frequencies inside the cutoff radius
+    # Center coordinates for the frequency domain
     center_x, center_y = cols // 2, rows // 2
+    
+    # Zero out frequencies inside the cutoff radius (low frequencies)
     for x in range(cols):
         for y in range(rows):
-            if np.sqrt((x - center_x)**2 + (y - center_y)**2) <= radius:
+            dist = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+            if dist < radius:  # Zeroing out the low frequencies
                 fft_result[y, x] = 0
 
+    # Return the filtered image after inverse FFT
     return ifft_2d(fft_result)
 
 def band_pass_filter(image, low_radius, high_radius):
@@ -1254,6 +1259,34 @@ def perform_ifft(fft_data):
     
     ifft_data = np.real(ifft_data)  # Take the real part of the result
     return np.clip(ifft_data, 0, 255)  # Clip to valid image range (0-255)
+
+def normalize_image(image):
+    """Normalize the image values to be between 0 and 255 without using NumPy functions."""
+    
+    # Find the minimum and maximum values manually
+    image_min = float('inf')
+    image_max = float('-inf')
+    
+    # Traverse the image to find the min and max values
+    for row in image:
+        for pixel in row:
+            if pixel < image_min:
+                image_min = pixel
+            if pixel > image_max:
+                image_max = pixel
+    
+    # Initialize a NumPy array with the same shape as the input image
+    normalized_image = np.empty(image.shape, dtype=np.uint8)
+    
+    # Normalize the image values and store them in the new array
+    for i in range(image.shape[0]):  # For each row
+        for j in range(image.shape[1]):  # For each column in the row
+            pixel = image[i, j]
+            normalized_pixel = 255 * (pixel - image_min) / (image_max - image_min)
+            # Clip values to ensure they stay between 0 and 255
+            normalized_image[i, j] = min(max(int(normalized_pixel), 0), 255)
+    
+    return normalized_image
 
 ### CMD commands
 def main():
@@ -1837,7 +1870,7 @@ def main():
 
     #TASK 4
 
-    elif command =='--FFS':
+    elif command =='--FFT':
         if len(sys.argv) != 4:
             print("Usage: python script.py --Task4 <image_path> <output_path>")
             sys.exit(1)
@@ -1905,7 +1938,8 @@ def main():
             image_low_pass = high_pass_filter(matrix, radius)
             image_low_pass_fliped = flipVertical(image_low_pass)
             image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            n_image_low_pass_fliped = normalize_image(image_low_pass_fliped)
+            saveImage(n_image_low_pass_fliped, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
@@ -1923,9 +1957,9 @@ def main():
             radius = int(sys.argv[3])
             print("Creating Filtered image")
             image_low_pass = high_pass_edge_detection(matrix, radius)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            #image_low_pass_fliped = flipVertical(image_low_pass)
+            #image_low_pass_fliped = flipHorizontal(image_low_pass)
+            saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
@@ -1986,9 +2020,9 @@ def main():
             l = int(sys.argv[4])
             print("Creating Filtered image")
             image_low_pass = phase_modulation(matrix, k, l)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            #image_low_pass_fliped = flipVertical(image_low_pass)
+            #image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
