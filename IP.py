@@ -1872,7 +1872,7 @@ def main():
 
     elif command =='--FFT':
         if len(sys.argv) != 4:
-            print("Usage: python script.py --Task4 <image_path> <output_path>")
+            print("Usage: python script.py --FFS <image_path> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1905,7 +1905,7 @@ def main():
     
     elif command =='--low_pass':
         if len(sys.argv) != 5:
-            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            print("Usage: python script.py --low_pass <image_path> <radius> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1925,7 +1925,7 @@ def main():
 
     elif command =='--high_pass':
         if len(sys.argv) != 5:
-            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            print("Usage: python script.py --high_pass <image_path> <radius> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1946,7 +1946,7 @@ def main():
 
     elif command =='--high_pass_edge':
         if len(sys.argv) != 5:
-            print("Usage: python script.py --Task4 <image_path> <radius> <output_path>")
+            print("Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1966,7 +1966,7 @@ def main():
 
     elif command =='--band_pass':
         if len(sys.argv) != 6:
-            print("Usage: python script.py --Task4 <image_path> <low_radius> <high_radius> <output_path>")
+            print("Usage: python script.py --band_pass <image_path> <low_radius> <high_radius> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1987,7 +1987,7 @@ def main():
     
     elif command =='--band_cut':
         if len(sys.argv) != 6:
-            print("Usage: python script.py --Task4 <image_path> <low_radius> <high_radius> <output_path>")
+            print("Usage: python script.py ----band_cut <image_path> <low_radius> <high_radius> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -2008,7 +2008,7 @@ def main():
 
     elif command =='--phase_modulation':
         if len(sys.argv) != 6:
-            print("Usage: python script.py --Task4 <image_path> <k> <l> <output_path>")
+            print("Usage: python script.py --phase_modulation <image_path> <k> <l> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -2053,7 +2053,14 @@ def main():
         print("--closing            | Usage: python script.py --closing <image_path> <struct_element> <output_path>")            
         print("--hmt                | Usage: python script.py --hmt <image_path> <XI, or XII> <struct_element> <output_path>")            
         print("--successive_n       | Usage: python script.py --successive_n <image_path> <output_path>")            
-        print("--region_growing       | Usage: python script.py --region_growing <image_path> <seed_points> <threshold> <criterion> <output_path>")            
+        print("--region_growing     | Usage: python script.py --region_growing <image_path> <seed_points> <threshold> <criterion> <output_path>")
+        print("--FFS                | Usage: python script.py --FFS <image_path> <output_path>")  
+        print("--low_pass           | Usage: python script.py --low_pass <image_path> <radius> <output_path>") 
+        print("--high_pass          | Usage: python script.py --high_pass <image_path> <radius> <output_path>")            
+        print("--high_pass_edge     | Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")            
+        print("--band_pass          | Usage: python script.py --band_pass <image_path> <low_radius> <high_radius> <output_path>")            
+        print("--band_cut           | Usage: python script.py ----band_cut <image_path> <low_radius> <high_radius> <output_path>")      
+        print("--phase_modulation   | Usage: python script.py --phase_modulation <image_path> <k> <l> <output_path>")                                       
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
