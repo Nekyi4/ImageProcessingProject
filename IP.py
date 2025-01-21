@@ -1198,6 +1198,44 @@ def high_pass_edge_detection(image, radius):
     # Inverse FFT to transform back to the spatial domain
     return perform_ifft(fft_data)
 
+def high_pass_edge_detection_mask(image, custom_mask):
+    """
+    Apply high-pass filter in the frequency domain using a custom mask for edge detection.
+    
+    Args:
+        image (ndarray): Input image (grayscale).
+        custom_mask (ndarray): Custom frequency domain mask (same size as the FFT of the image).
+        
+    Returns:
+        ndarray: Image after applying the custom mask edge detection in frequency domain.
+    """
+    # Perform FFT and get the frequency domain representation
+    fft_data, _, _ = perform_fft(image)
+    
+    # Ensure the custom mask is of the same size as the FFT result
+    rows, cols = fft_data.shape
+    if custom_mask.shape != (rows, cols):
+        raise ValueError("Custom mask must have the same shape as the frequency domain of the image.")
+
+    # Apply the custom mask in the frequency domain by element-wise multiplication
+    fft_data_filtered = fft_data * custom_mask
+    
+    # Inverse FFT to transform back to the spatial domain
+    return perform_ifft(fft_data_filtered)
+
+def create_high_pass_mask(image_shape, radius):
+    rows, cols = image_shape
+    center_x, center_y = cols // 2, rows // 2
+    mask = np.ones((rows, cols), dtype=np.float64)
+    
+    for y in range(rows):
+        for x in range(cols):
+            distance = np.hypot(x - center_x, y - center_y)
+            if distance <= radius:
+                mask[y, x] = 0  # Remove low frequencies, keep high frequencies
+            
+    return mask
+
 def phase_modulation(image, k, l):
     """
     Apply phase modulation in the frequency domain.
@@ -1964,6 +2002,26 @@ def main():
             print("Error processing the image.")
             sys.exit(1)
 
+    elif command =='--high_pass_edge_mask':
+        if len(sys.argv) != 5:
+            print("Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")
+            sys.exit(1)
+        try:
+            matrix = imageLoaderG(image_path)
+        except FileNotFoundError:
+            print(f"Error: File {image_path} not found.")
+            sys.exit(1)
+        try:
+            radius = int(sys.argv[3])
+            print("Creating Filtered image")
+            matrix_mask = imageLoaderG("F5mask2.bmp")
+            mask = create_high_pass_mask(matrix_mask.shape, radius)
+            image_low_pass = high_pass_edge_detection_mask(matrix, mask)
+            saveImage(image_low_pass, output_path)
+        except ValueError: 
+            print("Error processing the image.")
+            sys.exit(1)
+
     elif command =='--band_pass':
         if len(sys.argv) != 6:
             print("Usage: python script.py --band_pass <image_path> <low_radius> <high_radius> <output_path>")
@@ -1999,9 +2057,7 @@ def main():
             high_radius = int(sys.argv[4])
             print("Creating Filtered image")
             image_low_pass = band_cut(matrix, low_radius, high_radius)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
@@ -2026,6 +2082,8 @@ def main():
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
+
+    
 
     elif command =='--help':
         print("List of commands:")
