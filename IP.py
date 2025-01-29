@@ -1140,20 +1140,6 @@ def precompute_ifft_twiddles(N):
             twiddles[k, n] = cmath.exp(2j * np.pi * k * n / N)  # Positive exponent for IFFT
     return twiddles
 
-def decimate_spatial(image, factor):
-    """Downsample the image in the spatial domain by a given factor."""
-    return image[::factor, ::factor]
-
-def decimate_frequency(fft_data, threshold=5):
-    """Zero out frequency components with magnitude below the threshold."""
-    magnitude = np.abs(fft_data)
-    
-    # Zero out frequencies with magnitude smaller than the threshold
-    fft_data[magnitude < threshold] = 0
-    
-    return fft_data
-
-
 def low_pass_filter(image, radius):
     """
     Apply a low-pass filter in the frequency domain.
@@ -2165,6 +2151,7 @@ def main():
             log_magnitude = np.log1p(magnitude)  # Log scale
             normalized_magnitude = (log_magnitude / log_magnitude.max()) * 255
             saveImage(normalized_magnitude, "magnitude.bmp")
+            saveImage(fft_result, "fft_data.bmp")
             print("Saving Phase...")
             normalized_phase = ((phase + np.pi) / (2 * np.pi)) * 255
             saveImage(normalized_phase, "phase.bmp")
