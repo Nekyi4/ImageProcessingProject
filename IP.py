@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import time
 import cmath
+import cv2
 from math import cos, sin, pi
 
 ### Image processing
@@ -734,7 +735,7 @@ def successive_n_transform(image, struct_elements):
     :return: Transformed image
     """
 
-    height = len(image)
+    '''height = len(image)
     width = len(image[0])
     for i in range(1):
         for se in struct_elements:
@@ -744,28 +745,25 @@ def successive_n_transform(image, struct_elements):
                 for j in range(width):
                     if(new_image[i][j] == 1):
                         image[i][j] = 0
-            ##image = np.where(image != new_image, new_image, image)  # Update only where changes occur
-    return image
-    
-
-    
-    '''changes_made = True  # Flag to track if any changes were made
-
-    while changes_made:
-        changes_made = False  # Reset flag at the beginning of each iteration
-
-        for se in struct_elements:
-            new_image = image.copy()
-            new_image = erosion(new_image, se[0])  # Apply erosion with the first element of the pair
-            updated_image = np.where(image != new_image, new_image, image)  # Update only where changes occur
-
-            # Check if there was any change
-            if not np.array_equal(image, updated_image):
-                changes_made = True
-
-            image = updated_image  # Update the image for the next iteration
-
     return image'''
+    
+    height = len(image)
+    width = len(image[0])
+    while True:  # Loop until convergence
+        has_changed = False  # Track if any pixel value changes
+        for se in struct_elements:
+            # Perform hit-or-miss transformation for the current structuring element
+            new_image = hmt(image, se)
+            for i in range(height):
+                for j in range(width):
+                    if new_image[i][j] == 1:
+                        # If a change is detected, update the pixel
+                        if image[i][j] != 0:  # Check if the pixel changes
+                            has_changed = True
+                        image[i][j] = 0
+        if not has_changed:  # Exit loop if no changes occurred in this iteration
+            break
+    return image
     
 
 def structural_elements(param):
@@ -998,7 +996,7 @@ def seed_points():
 # TASK 4
 
 def precompute_twiddles(N):
-    """Precompute twiddle factors for FFT and IFFT, using NumPy for efficiency."""
+    """Precompute twiddle factors for FFT"""
     # Create a 2D array for twiddles (rows x columns)
     twiddles = np.zeros((N, N), dtype=complex)
     for k in range(N):
@@ -1031,42 +1029,130 @@ def fft_2d(image):
     # Apply DFT column-wise using vectorized approach
     fft_result = np.array([dft_1d(col, col_twiddles) for col in row_transformed.T]).T
 
+    # Extract the DC component (top-left corner in unshifted result)
+    dc_component = fft_result[0, 0]
+
     # Return the result shifted to center the low frequencies
-    fft_result = np.fft.fftshift(fft_result)
+    #fft_result = np.fft.fftshift(fft_result)
+    fft_result = fftshift_manual(fft_result)
 
     # Compute magnitude and phase
     magnitude = np.abs(fft_result)
     phase = np.angle(fft_result)
 
-    return fft_result, magnitude, phase
+    return fft_result, magnitude, phase, dc_component
 
-
-
-def ifft_2d(fft_data):
+def fftshift_manual(fft_result):
     """
-    Perform the 2D inverse FFT (IFFT) on the Fourier transformed image.
+    Manually shift the zero-frequency component to the center of the spectrum.
+    
+    Args:
+        fft_result (ndarray): The 2D Fourier transformed result (complex).
+        
+    Returns:
+        ndarray: The shifted Fourier transform with DC component centered.
+    """
+    rows, cols = fft_result.shape
+    mid_x, mid_y = cols // 2, rows // 2
+    
+    # Shift the quadrants of the 2D array 
+    shifted_result = np.zeros_like(fft_result)
+    
+    # Top-left to bottom-right
+    shifted_result[mid_y:, mid_x:] = fft_result[:mid_y, :mid_x]
+    # Top-right to bottom-left
+    shifted_result[mid_y:, :mid_x] = fft_result[:mid_y, mid_x:]
+    # Bottom-left to top-right
+    shifted_result[:mid_y, mid_x:] = fft_result[mid_y:, :mid_x]
+    # Bottom-right to top-left
+    shifted_result[:mid_y, :mid_x] = fft_result[mid_y:, mid_x:]
+    
+    return shifted_result
+
+
+def ifft_2d(fft_data, dc_component):
+    """
+    Perform the 2D inverse FFT (IFFT) on the Fourier transformed image, restoring the DC component.
+
     Args:
         fft_data (ndarray): Fourier transformed image (complex).
+        dc_component (complex): DC component to restore.
+
     Returns:
         ndarray: Reconstructed image in the spatial domain (real-valued).
     """
-    # Shift the frequencies back to the original position before performing IFFT
-    fft_data = np.fft.ifftshift(fft_data)
+    # Shift the frequencies back to the original position
+    #fft_data = np.fft.ifftshift(fft_data)
+    fft_data = ifftshift_manual(fft_data)
+
+    fft_data[0, 0] = dc_component
 
     rows, cols = fft_data.shape
 
-    # Precompute twiddles
-    row_twiddles = precompute_twiddles(cols)
-    col_twiddles = precompute_twiddles(rows)
+    # Precompute correct IFFT twiddles (conjugate of FFT twiddles)
+    row_twiddles = precompute_ifft_twiddles(cols)
+    col_twiddles = precompute_ifft_twiddles(rows)
 
-    # Apply IFFT column-wise using vectorized approach
-    col_ifft = np.array([dft_1d(fft_data[:, col], col_twiddles) for col in range(cols)]).T
+    # Apply IFFT row-wise first
+    row_ifft = np.array([dft_1d(fft_data[row], row_twiddles) for row in range(rows)])
 
-    # Apply IFFT row-wise using vectorized approach
-    ifft_result = np.array([dft_1d(col_ifft[row], row_twiddles) for row in range(rows)]) / (rows * cols)
+    # Apply IFFT column-wise second
+    ifft_result = np.array([dft_1d(row_ifft[:, col], col_twiddles) for col in range(cols)]).T
 
-    # Return the real part (since it's a real-valued image)
+    # Normalize by the total number of elements
+    ifft_result /= (rows * cols)
+
+    # Return the real part (since the final image should be real-valued)
     return np.real(ifft_result)
+
+def ifftshift_manual(fft_data):
+    """
+    Manually shift the zero-frequency component back to the top-left corner.
+    
+    Args:
+        fft_data (ndarray): The 2D Fourier transformed result (complex).
+        
+    Returns:
+        ndarray: The shifted Fourier transform with the low frequencies moved back to the corners.
+    """
+    rows, cols = fft_data.shape
+    mid_x, mid_y = cols // 2, rows // 2
+    
+    # Shift the quadrants of the 2D array
+    shifted_result = np.zeros_like(fft_data)
+    
+    # Bottom-left to top-right
+    shifted_result[:mid_y, :mid_x] = fft_data[mid_y:, mid_x:]
+    # Bottom-right to top-left
+    shifted_result[:mid_y, mid_x:] = fft_data[mid_y:, :mid_x]
+    # Top-left to bottom-right
+    shifted_result[mid_y:, :mid_x] = fft_data[:mid_y, mid_x:]
+    # Top-right to bottom-left
+    shifted_result[mid_y:, mid_x:] = fft_data[:mid_y, :mid_x]
+    
+    return shifted_result
+
+def precompute_ifft_twiddles(N):
+    """Precompute twiddle factors for IFFT, using the correct conjugate exponent."""
+    twiddles = np.zeros((N, N), dtype=complex)
+    for k in range(N):
+        for n in range(N):
+            twiddles[k, n] = cmath.exp(2j * np.pi * k * n / N)  # Positive exponent for IFFT
+    return twiddles
+
+def decimate_spatial(image, factor):
+    """Downsample the image in the spatial domain by a given factor."""
+    return image[::factor, ::factor]
+
+def decimate_frequency(fft_data, threshold=5):
+    """Zero out frequency components with magnitude below the threshold."""
+    magnitude = np.abs(fft_data)
+    
+    # Zero out frequencies with magnitude smaller than the threshold
+    fft_data[magnitude < threshold] = 0
+    
+    return fft_data
+
 
 def low_pass_filter(image, radius):
     """
@@ -1077,7 +1163,7 @@ def low_pass_filter(image, radius):
     Returns:
         ndarray: Filtered image (real-valued).
     """
-    fft_result, _, _ = fft_2d(image)  # Get FFT result and shift it to center
+    fft_result, magnitude, phase, dc_component = fft_2d(image)  # Get FFT result and shift it to center
 
     rows, cols = fft_result.shape
 
@@ -1090,9 +1176,9 @@ def low_pass_filter(image, radius):
             dist = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
             if dist > radius:
                 fft_result[y, x] = 0  # Zero out high frequencies
-
+    
     # Return the filtered image after inverse FFT
-    return ifft_2d(fft_result)
+    return ifft_2d(fft_result, dc_component)
 
 def high_pass_filter(image, radius):
     """
@@ -1104,7 +1190,7 @@ def high_pass_filter(image, radius):
         ndarray: Filtered image (real-valued).
     """
     # Perform FFT on the image
-    fft_result, _, _ = fft_2d(image)
+    fft_result, _, _, dc_component = fft_2d(image)
     rows, cols = fft_result.shape
 
     # Center coordinates for the frequency domain
@@ -1118,7 +1204,7 @@ def high_pass_filter(image, radius):
                 fft_result[y, x] = 0
 
     # Return the filtered image after inverse FFT
-    return ifft_2d(fft_result)
+    return ifft_2d(fft_result, dc_component)
 
 def band_pass_filter(image, low_radius, high_radius):
     """
@@ -1130,7 +1216,7 @@ def band_pass_filter(image, low_radius, high_radius):
     Returns:
         ndarray: Filtered image (real-valued).
     """
-    fft_result, _, _ = fft_2d(image)
+    fft_result, _, _, dc_component = fft_2d(image)
     rows, cols = fft_result.shape
 
     # Zero out frequencies outside the band-pass range
@@ -1141,7 +1227,7 @@ def band_pass_filter(image, low_radius, high_radius):
             if distance < low_radius or distance > high_radius:
                 fft_result[y, x] = 0
 
-    return ifft_2d(fft_result)
+    return ifft_2d(fft_result, dc_component)
 
 def band_cut(image, low, high):
     """
@@ -1156,7 +1242,7 @@ def band_cut(image, low, high):
         ndarray: Image after band-cut filtering in the frequency domain.
     """
     # Perform FFT and get the frequency domain representation
-    fft_data, _, _ = perform_fft(image)
+    fft_data, _, _, dc_component = fft_2d(image)
     
     rows, cols = fft_data.shape
     center_x, center_y = cols // 2, rows // 2
@@ -1169,21 +1255,22 @@ def band_cut(image, low, high):
                 fft_data[y, x] = 0  # Set frequencies in the band to zero
     
     # Inverse FFT to transform back to the spatial domain
-    return perform_ifft(fft_data)
+    return ifft_2d(fft_data, dc_component)
 
-def high_pass_edge_detection(image, radius):
+def high_pass_edge_detection(image, radius, mask):
     """
-    Apply high-pass filter in the frequency domain and return the image after edge detection.
+    Apply high-pass filter in the frequency domain with a mask and return the image after edge detection.
     
     Args:
         image (ndarray): Input image.
         radius (int): Radius for high-pass filtering (frequencies below this radius will be removed).
+        mask (ndarray): Binary mask (1 for areas to keep, 0 for areas to filter).
         
     Returns:
-        ndarray: Image after high-pass edge detection.
+        ndarray: Image after high-pass edge detection with mask applied.
     """
     # Perform FFT and get the frequency domain representation
-    fft_data, _, _ = perform_fft(image)
+    fft_data, _, _, dc_component = fft_2d(image)
     
     rows, cols = fft_data.shape
     center_x, center_y = cols // 2, rows // 2
@@ -1195,8 +1282,49 @@ def high_pass_edge_detection(image, radius):
             if distance <= radius:
                 fft_data[y, x] = 0  # Remove low-frequency components
     
+    # Apply the mask to the frequency domain
+    fft_data = fft_data * mask
+    
     # Inverse FFT to transform back to the spatial domain
-    return perform_ifft(fft_data)
+    return ifft_2d(fft_data, dc_component)
+
+def high_pass_edge_detection_mask_2(image, radius, mask_choice):
+    """
+    Apply high-pass filter in the frequency domain and return the image after edge detection,
+    taking into account the specified angle direction for the mask.
+    
+    Args:
+        image (ndarray): Input image.
+        radius (int): Radius for high-pass filtering (frequencies below this radius will be removed).
+        mask_choice (int): The mask choice for determining the angle range for edge detection.
+        
+    Returns:
+        ndarray: Image after high-pass edge detection with respect to the angle direction.
+    """
+    # Perform FFT and get the frequency domain representation
+    fft_data, _, _, dc_component = fft_2d(image)
+    
+    rows, cols = fft_data.shape
+    center_x, center_y = cols // 2, rows // 2
+    
+    # Set angle range based on mask choice
+    angle_range = set_angle_range_based_on_choice(mask_choice)
+    
+    # Apply high-pass filtering considering the angle direction
+    for y in range(rows):
+        for x in range(cols):
+            # Calculate distance from the center (for low-pass cutoff)
+            distance = np.hypot(x - center_x, y - center_y)
+            
+            # Calculate angle of the frequency point in degrees
+            angle = np.degrees(np.arctan2(y - center_y, x - center_x)) % 180
+            
+            # Apply high-pass filter: remove low frequencies within the angle range
+            if distance <= radius or not (angle_range[0] <= angle < angle_range[1]):
+                fft_data[y, x] = 0  # Set low frequencies to zero
+
+    # Inverse FFT to transform back to the spatial domain
+    return ifft_2d(fft_data, dc_component)
 
 def high_pass_edge_detection_mask(image, custom_mask):
     """
@@ -1210,19 +1338,48 @@ def high_pass_edge_detection_mask(image, custom_mask):
         ndarray: Image after applying the custom mask edge detection in frequency domain.
     """
     # Perform FFT and get the frequency domain representation
-    fft_data, _, _ = perform_fft(image)
-    
+    fft_data, _, _, dc_component = fft_2d(image)
+
     # Ensure the custom mask is of the same size as the FFT result
     rows, cols = fft_data.shape
     if custom_mask.shape != (rows, cols):
-        raise ValueError("Custom mask must have the same shape as the frequency domain of the image.")
-
+        print(f"FFT Shape: {fft_data.shape}, Mask Shape: {custom_mask.shape}")
     # Apply the custom mask in the frequency domain by element-wise multiplication
     fft_data_filtered = fft_data * custom_mask
     
     # Inverse FFT to transform back to the spatial domain
-    return perform_ifft(fft_data_filtered)
+    return ifft_2d(fft_data, dc_component)
 
+def directional_high_pass_mask(image_shape, radius, edge_directions, preferred_angle_range=(0, 180)):
+    """
+    Create a high-pass mask that selectively keeps frequencies based on edge direction.
+    
+    Args:
+        image_shape (tuple): Shape of the frequency domain image.
+        radius (int): Cut-off radius for high-pass filtering.
+        edge_directions (ndarray): Edge direction matrix (same size as image).
+        preferred_angle_range (tuple): Range of angles to keep (e.g., (45, 135) for diagonal edges).
+    
+    Returns:
+        ndarray: Directional high-pass filter mask.
+    """
+    rows, cols = image_shape
+    center_x, center_y = cols // 2, rows // 2
+    mask = np.ones((rows, cols), dtype=np.float64)
+    
+    for y in range(rows):
+        for x in range(cols):
+            distance = np.hypot(x - center_x, y - center_y)
+            if distance <= radius:
+                mask[y, x] = 0  # Remove low frequencies
+
+            # Keep only edges within the specified angle range
+            angle = edge_directions[y, x]
+            if not (preferred_angle_range[0] <= angle <= preferred_angle_range[1]):
+                mask[y, x] = 0  # Suppress unwanted directions
+    
+    return mask
+    
 def create_high_pass_mask(image_shape, radius):
     rows, cols = image_shape
     center_x, center_y = cols // 2, rows // 2
@@ -1235,6 +1392,123 @@ def create_high_pass_mask(image_shape, radius):
                 mask[y, x] = 0  # Remove low frequencies, keep high frequencies
             
     return mask
+
+def extract_edge_direction(mask, threshold=10):
+    """
+    Extract edge directions using Sobel gradients, removing weak edges based on a threshold.
+    
+    Args:
+        mask (ndarray): Binary edge mask (white edges on black background).
+        threshold (int): Gradient magnitude threshold to ignore weak edges.
+    
+    Returns:
+        ndarray: Edge direction matrix (angle in degrees).
+    """
+    sobel_edges = osobel(mask)  # Apply Sobel operator to get edge magnitudes
+    
+    height, width = mask.shape
+    grad_x = np.zeros_like(mask, dtype=np.float64)
+    grad_y = np.zeros_like(mask, dtype=np.float64)
+    
+    # Compute gradients and directions
+    for n in range(1, height - 1):
+        for m in range(1, width - 1):
+            A0 = mask[n-1, m-1]
+            A1 = mask[n-1, m]
+            A2 = mask[n-1, m+1]
+            A3 = mask[n, m+1]
+            A4 = mask[n+1, m+1]
+            A5 = mask[n+1, m]
+            A6 = mask[n+1, m-1]
+            A7 = mask[n, m-1]
+            
+            # Compute Sobel gradients
+            grad_x[n, m] = (A2 + 2 * A3 + A4) - (A0 + 2 * A7 + A6)
+            grad_y[n, m] = (A0 + 2 * A1 + A2) - (A6 + 2 * A5 + A4)
+    
+    # Compute gradient magnitude
+    grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    
+    # Filter out weak edges based on the threshold
+    grad_x[grad_magnitude < threshold] = 0
+    grad_y[grad_magnitude < threshold] = 0
+    
+    # Compute edge direction in degrees
+    edge_direction = np.arctan2(grad_y, grad_x)  # Radians
+    edge_direction_degrees = np.degrees(edge_direction)  # Convert to degrees
+
+    return edge_direction_degrees
+
+def determine_dominant_orientation(edge_directions):
+    """
+    Determine the dominant edge orientation based on the edge directions.
+    
+    Args:
+        edge_directions (ndarray): Edge directions in degrees.
+    
+    Returns:
+        float: Dominant angle in degrees.
+    """
+    # Flatten the array and remove any NaN values (where there's no edge)
+    flattened = edge_directions.flatten()
+    flattened = flattened[~np.isnan(flattened)]
+
+    # Print how many times each unique value appears
+    unique_values, counts = np.unique(flattened, return_counts=True)
+    for value, count in zip(unique_values, counts):
+        print(f"Angle {value:.2f} degrees appears {count} times.")
+    
+    # Compute a histogram of the edge directions (0-180 degrees)
+    hist, bin_edges = np.histogram(flattened, bins=18, range=(0, 180))
+
+    # Find the bin with the highest count (dominant orientation)
+    dominant_bin = np.argmax(hist)
+    dominant_angle = (bin_edges[dominant_bin] + bin_edges[dominant_bin + 1]) / 2  # Midpoint of the dominant bin
+    
+    return dominant_angle
+
+def set_angle_range_based_on_orientation(dominant_angle):
+    """
+    Set the angle range based on the dominant edge orientation.
+    
+    Args:
+        dominant_angle (float): Dominant angle in degrees.
+    
+    Returns:
+        tuple: Angle range (start, end) for directional filtering.
+    """
+    # Define angle ranges based on the dominant orientation
+    if 0 <= dominant_angle < 45 or 135 <= dominant_angle < 180:
+        # Diagonal edges (0 to 45 degrees, or 135 to 180 degrees)
+        return (0, 90)
+    else:
+        # Vertical/horizontal edges (45 to 135 degrees)
+        return (90, 180)
+
+def set_angle_range_based_on_choice(mask_choice):
+    """
+    Set the angle range based on the mask choice argument.
+    
+    Args:
+        mask_choice (int): Choice of edge detection orientation.
+    
+    Returns:
+        tuple: Angle range (start, end) for directional filtering.
+    """
+    if mask_choice == 1:
+        # Horizontal edges: 0° to 45°
+        return (0, 45)
+    elif mask_choice == 2:
+        # Vertical edges: 45° to 90°
+        return (45, 90)
+    elif mask_choice == 3:
+        # Horizontal + Vertical edges: 0° to 90°
+        return (0, 90)
+    elif mask_choice == 4:
+        # Horizontal + Vertical + Diagonal edges: 0° to 180°
+        return (0, 180)
+    else:
+        raise ValueError("Invalid mask_choice. Please choose a value between 1 and 4.")
 
 def phase_modulation(image, k, l):
     """
@@ -1249,7 +1523,7 @@ def phase_modulation(image, k, l):
         ndarray: Image after phase modulation.
     """
     # Perform FFT and get the frequency domain representation
-    fft_data, _, phase = perform_fft(image)
+    fft_data, _, phase, dc_component = fft_2d(image)
     
     rows, cols = fft_data.shape
     center_x, center_y = cols // 2, rows // 2
@@ -1261,42 +1535,7 @@ def phase_modulation(image, k, l):
             fft_data[y, x] *= np.exp(1j * phase_shift)  # Apply the phase shift in frequency domain
     
     # Inverse FFT to get the image after phase modulation
-    return perform_ifft(fft_data)
-
-def perform_fft(image):
-    """
-    Perform the Fourier Transform on an image and return its FFT data, magnitude, and phase.
-    
-    Args:
-        image (ndarray): Input image.
-        
-    Returns:
-        tuple: FFT data, magnitude, and phase of the Fourier transformed image.
-    """
-    # Apply FFT and shift zero frequency component to the center
-    fft_data = np.fft.fftshift(np.fft.fft2(image))
-    
-    # Compute the magnitude and phase from the complex FFT data
-    magnitude = np.abs(fft_data)
-    phase = np.angle(fft_data)
-    
-    return fft_data, magnitude, phase
-
-def perform_ifft(fft_data):
-    """
-    Perform the Inverse Fourier Transform to return the spatial domain image.
-    
-    Args:
-        fft_data (ndarray): Input FFT data (complex).
-        
-    Returns:
-        ndarray: Reconstructed image from the inverse FFT.
-    """
-    # Apply Inverse FFT and shift zero frequency component back to original position
-    ifft_data = np.fft.ifft2(np.fft.ifftshift(fft_data))
-    
-    ifft_data = np.real(ifft_data)  # Take the real part of the result
-    return np.clip(ifft_data, 0, 255)  # Clip to valid image range (0-255)
+    return ifft_2d(fft_data,dc_component)
 
 def normalize_image(image):
     """Normalize the image values to be between 0 and 255 without using NumPy functions."""
@@ -1320,7 +1559,7 @@ def normalize_image(image):
     for i in range(image.shape[0]):  # For each row
         for j in range(image.shape[1]):  # For each column in the row
             pixel = image[i, j]
-            normalized_pixel = 255 * (pixel - image_min) / (image_max - image_min)
+            normalized_pixel = 255.0 * (float(pixel) - float(image_min)) / float(image_max - image_min)
             # Clip values to ensure they stay between 0 and 255
             normalized_image[i, j] = min(max(int(normalized_pixel), 0), 255)
     
@@ -1910,7 +2149,7 @@ def main():
 
     elif command =='--FFT':
         if len(sys.argv) != 4:
-            print("Usage: python script.py --FFS <image_path> <output_path>")
+            print("Usage: python script.py --FFT <image_path> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1919,7 +2158,8 @@ def main():
             sys.exit(1)
         try:
             print("Initial FFT")
-            fft_result, magnitude, phase = fft_2d(matrix)
+            #matrix = decimate_spatial(matrix,2)
+            fft_result, magnitude, phase, dc_component = fft_2d(matrix)
             print("Saving Magnitude and Phase")
             print("Saving Magnitude...")
             log_magnitude = np.log1p(magnitude)  # Log scale
@@ -1928,14 +2168,9 @@ def main():
             print("Saving Phase...")
             normalized_phase = ((phase + np.pi) / (2 * np.pi)) * 255
             saveImage(normalized_phase, "phase.bmp")
-            print("Creating Filter and Phase")
-            image_low_pass = low_pass_filter(matrix, 15)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, "Filtered_image.bmp")
-            print("Creating Phase mask")
-            image_phase_modulated = phase_modulation(matrix, 2, 3)
-            saveImage(image_phase_modulated, "Modified_phase_image.bmp")
+            print("Reconstructing image")
+            reconstructed_image = ifft_2d(fft_result, dc_component)
+            saveImage(reconstructed_image, output_path)
             sys.exit(1)
         except ValueError: 
             print("Error processing the image.")
@@ -1954,9 +2189,8 @@ def main():
             radius = int(sys.argv[3])
             print("Creating Filtered image")
             image_low_pass = low_pass_filter(matrix, radius)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            #image_low_pass = normalize_image(image_low_pass)
+            saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
@@ -1973,18 +2207,16 @@ def main():
         try:
             radius = int(sys.argv[3])
             print("Creating Filtered image")
-            image_low_pass = high_pass_filter(matrix, radius)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            n_image_low_pass_fliped = normalize_image(image_low_pass_fliped)
-            saveImage(n_image_low_pass_fliped, output_path)
+            image_high_pass = high_pass_filter(matrix, radius)
+            image_high_pass = normalize_image(image_high_pass)
+            saveImage(image_high_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
 
     elif command =='--high_pass_edge':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --high_pass_edge <image_path> <radius> <mask> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -1993,18 +2225,20 @@ def main():
             sys.exit(1)
         try:
             radius = int(sys.argv[3])
+            mask_choice = int(sys.argv[4])
             print("Creating Filtered image")
-            image_low_pass = high_pass_edge_detection(matrix, radius)
-            #image_low_pass_fliped = flipVertical(image_low_pass)
-            #image_low_pass_fliped = flipHorizontal(image_low_pass)
+            mask_path = "F5mask1.bmp" if mask_choice == 1 else "F5mask2.bmp"
+            matrix_mask = imageLoader1B(mask_path)
+            image_low_pass = high_pass_edge_detection(matrix, radius, matrix_mask)
+            image_low_pass = normalize_image(image_low_pass)
             saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
 
-    elif command =='--high_pass_edge_mask':
-        if len(sys.argv) != 5:
-            print("Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")
+    elif command == '--high_pass_edge_mask':
+        if len(sys.argv) != 6:
+            print("Usage: python script.py --high_pass_edge_mask <image_path> <radius> <mask> <output_path>")
             sys.exit(1)
         try:
             matrix = imageLoaderG(image_path)
@@ -2013,14 +2247,41 @@ def main():
             sys.exit(1)
         try:
             radius = int(sys.argv[3])
+            mask_choice = int(sys.argv[4])
             print("Creating Filtered image")
-            matrix_mask = imageLoaderG("F5mask2.bmp")
-            mask = create_high_pass_mask(matrix_mask.shape, radius)
-            image_low_pass = high_pass_edge_detection_mask(matrix, mask)
+            
+            # Load mask image
+            mask_path = "F5mask1.bmp" if mask_choice == 1 else "F5mask2.bmp"
+            matrix_mask = imageLoader1B(mask_path)
+            
+            '''# Step 1: Extract edge directions from the mask
+            edge_directions = extract_edge_direction(matrix_mask)
+
+            # Step 2: Determine the dominant orientation
+            dominant_angle = determine_dominant_orientation(edge_directions)
+
+            # Step 3: Set the angle range for filtering based on the dominant orientation
+            angle_range = set_angle_range_based_on_orientation(dominant_angle)
+
+            # Print the chosen angle range for debugging
+            print(f"Dominant Angle: {dominant_angle}°")
+            print(f"Using Angle Range: {angle_range}")
+
+            # Step 4: Create the directional high-pass filter
+            mask = directional_high_pass_mask(matrix_mask.shape, radius, edge_directions, angle_range)
+            
+            # Apply high-pass edge detection
+            image_filtered = high_pass_edge_detection_mask(matrix, mask)
+            image_filtered_norm = normalize_image(image_filtered)
+            '''
+            image_low_pass = high_pass_edge_detection_mask_2(matrix, radius, mask_choice)
+            image_low_pass = normalize_image(image_low_pass)
             saveImage(image_low_pass, output_path)
-        except ValueError: 
+        except ValueError:
             print("Error processing the image.")
             sys.exit(1)
+
+
 
     elif command =='--band_pass':
         if len(sys.argv) != 6:
@@ -2036,9 +2297,8 @@ def main():
             high_radius = int(sys.argv[4])
             print("Creating Filtered image")
             image_low_pass = band_pass_filter(matrix, low_radius, high_radius)
-            image_low_pass_fliped = flipVertical(image_low_pass)
-            image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
-            saveImage(image_low_pass_fliped, output_path)
+            image_low_pass = normalize_image(image_low_pass)
+            saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
             sys.exit(1)
@@ -2057,6 +2317,7 @@ def main():
             high_radius = int(sys.argv[4])
             print("Creating Filtered image")
             image_low_pass = band_cut(matrix, low_radius, high_radius)
+            image_low_pass = normalize_image(image_low_pass)
             saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
@@ -2076,8 +2337,7 @@ def main():
             l = int(sys.argv[4])
             print("Creating Filtered image")
             image_low_pass = phase_modulation(matrix, k, l)
-            #image_low_pass_fliped = flipVertical(image_low_pass)
-            #image_low_pass_fliped = flipHorizontal(image_low_pass_fliped)
+            image_low_pass = normalize_image(image_low_pass)
             saveImage(image_low_pass, output_path)
         except ValueError: 
             print("Error processing the image.")
@@ -2118,7 +2378,9 @@ def main():
         print("--high_pass_edge     | Usage: python script.py --high_pass_edge <image_path> <radius> <output_path>")            
         print("--band_pass          | Usage: python script.py --band_pass <image_path> <low_radius> <high_radius> <output_path>")            
         print("--band_cut           | Usage: python script.py ----band_cut <image_path> <low_radius> <high_radius> <output_path>")      
-        print("--phase_modulation   | Usage: python script.py --phase_modulation <image_path> <k> <l> <output_path>")                                       
+        print("--phase_modulation   | Usage: python script.py --phase_modulation <image_path> <k> <l> <output_path>")
+        print("--high_pass_edge_mask     | Usage: python script.py --high_pass_edge_mask <image_path> <radius> <mask> <output_path>")
+                                               
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
